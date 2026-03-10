@@ -1,0 +1,213 @@
+"use client";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { formatCurrency, formatDate, providerLabel } from "@/lib/utils";
+import Link from "next/link";
+import type { DashboardStats, ConnectedEmailAccount } from "@/lib/types";
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [accounts, setAccounts] = useState<ConnectedEmailAccount[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    try {
+      const res = await fetch("/api/dashboard");
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data.stats);
+        setAccounts(data.emailAccounts);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await fetch("/api/sync", { method: "POST" });
+      await fetchData();
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="flex items-center justify-center py-24 text-neutral-400">Loading dashboard...</div>;
+  }
+
+  if (!stats) {
+    return <div className="flex items-center justify-center py-24 text-neutral-400">No data yet. Connect Gmail and sync to get started.</div>;
+  }
+
+  const account = accounts[0];
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">Dashboard</h1>
+          <p className="mt-1 text-sm text-neutral-500">Your ride receipt intelligence at a glance.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
+            <span className="mr-2">🔄</span> {syncing ? "Syncing..." : "Sync Emails"}
+          </Button>
+          <Link href="/exports">
+            <Button size="sm"><span className="mr-2">📥</span> Export</Button>
+          </Link>
+        </div>
+      </div>
+
+      {account && (
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg dark:bg-blue-900/20">📧</div>
+              <div>
+                <div className="text-sm font-medium text-neutral-900 dark:text-white">{account.email}</div>
+                <div className="text-xs text-neutral-400">
+                  {account.lastSyncAt ? `Last synced: ${formatDate(account.lastSyncAt)}` : "Never synced"}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant="success">{account.status}</Badge>
+              <span className="text-sm text-neutral-500">{account.totalImported} receipts imported</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-sm font-medium text-neutral-500">Total Receipts</div>
+            <div className="mt-2 text-3xl font-bold text-neutral-900 dark:text-white">{stats.totalReceipts}</div>
+            {stats.reviewCount > 0 && (
+              <div className="mt-2"><Badge variant="warning">{stats.reviewCount} need review</Badge></div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-sm font-medium text-neutral-500">Total Spend (EUR)</div>
+            <div className="mt-2 text-3xl font-bold text-neutral-900 dark:text-white">{formatCurrency(stats.totalSpend, 'EUR')}</div>
+            <div className="mt-2 text-xs text-neutral-400">Converted at FX rates</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-sm font-medium text-neutral-500">Invoiceable</div>
+            <div className="mt-2 text-3xl font-bold text-emerald-600">{formatCurrency(stats.invoiceableTotal, 'EUR')}</div>
+            <div className="mt-2 text-xs text-neutral-400">With 5% markup</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-sm font-medium text-neutral-500">Currencies</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {stats.byCurrency.map((c) => (
+                <Badge key={c.currency} variant="secondary">{c.currency} ({c.count})</Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle>By Provider</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {stats.byProvider.map((p) => (
+                <div key={p.provider} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Badge variant={p.provider as 'uber' | 'bolt'}>{providerLabel(p.provider)}</Badge>
+                    <span className="text-sm text-neutral-500">{p.count} rides</span>
+                  </div>
+                  <span className="text-sm font-semibold text-neutral-900 dark:text-white">{formatCurrency(p.total, 'EUR')}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>By Country</CardTitle></CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {stats.byCountry.map((c) => (
+                <div key={c.country} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{c.country}</span>
+                    <span className="text-xs text-neutral-400">({c.count})</span>
+                  </div>
+                  <span className="text-sm font-semibold text-neutral-900 dark:text-white">{formatCurrency(c.total, 'EUR')}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {stats.byMonth.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Monthly Spend</CardTitle></CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-4">
+              {stats.byMonth.map((m) => {
+                const maxTotal = Math.max(...stats.byMonth.map(x => x.total));
+                const height = maxTotal > 0 ? (m.total / maxTotal) * 160 : 0;
+                return (
+                  <div key={m.month} className="flex flex-1 flex-col items-center gap-2">
+                    <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{formatCurrency(m.total, 'EUR')}</span>
+                    <div className="w-full rounded-t-lg bg-neutral-900 dark:bg-white" style={{ height: `${Math.max(height, 8)}px` }} />
+                    <span className="text-xs text-neutral-400">{m.month}</span>
+                    <span className="text-xs text-neutral-400">{m.count} rides</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {stats.recentReceipts.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Recent Receipts</CardTitle>
+            <Link href="/receipts"><Button variant="ghost" size="sm">View all</Button></Link>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {stats.recentReceipts.map((r) => (
+                <div key={r.id} className="flex items-center justify-between rounded-xl border border-neutral-100 p-4 dark:border-neutral-800">
+                  <div className="flex items-center gap-4">
+                    <Badge variant={r.provider as 'uber' | 'bolt'}>{providerLabel(r.provider)}</Badge>
+                    <div>
+                      <div className="text-sm font-medium text-neutral-900 dark:text-white">{r.city}, {r.country}</div>
+                      <div className="text-xs text-neutral-400">{formatDate(r.tripDate)}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-neutral-900 dark:text-white">{formatCurrency(r.amountTotal, r.currency)}</div>
+                    {r.convertedCurrency && r.convertedCurrency !== r.currency && (
+                      <div className="text-xs text-neutral-400">≈ {formatCurrency(r.convertedAmount!, r.convertedCurrency)}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

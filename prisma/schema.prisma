@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── NextAuth Models ──────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── App Models ───────────────────────────────────────────────────────────────
+
+model User {
+  id                   String               @id @default(cuid())
+  name                 String?
+  email                String?              @unique
+  emailVerified        DateTime?
+  image                String?
+  defaultCurrency      String               @default("EUR")
+  defaultMarkupPercent Float                @default(5)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  accounts             Account[]
+  sessions             Session[]
+  emailAccounts        ConnectedEmailAccount[]
+  receipts             Receipt[]
+  billingEntities      BillingEntity[]
+  invoiceBatches       InvoiceBatch[]
+  exportJobs           ExportJob[]
+}
+
+model ConnectedEmailAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  provider      String
+  email         String
+  accessToken   String?
+  refreshToken  String?
+  status        String   @default("active")
+  lastSyncAt    DateTime?
+  syncStatus    String   @default("idle")
+  totalImported Int      @default(0)
+  connectedAt   DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, email])
+  @@index([userId])
+}
+
+model Receipt {
+  id                   String   @id @default(cuid())
+  userId               String
+  provider             String
+  sourceEmailAccountId String
+  sourceMessageId      String   @unique
+  receiptExternalId    String?
+  tripDate             DateTime
+  importDate           DateTime @default(now())
+  country              String
+  countryCode          String
+  city                 String
+  pickupLocation       String?
+  dropoffLocation      String?
+  amountTotal          Float
+  amountTax            Float?
+  currency             String
+  paymentMethodMasked  String?
+  businessPurpose      String?
+  notes                String?
+  tags                 String   @default("")
+  rawEmailSubject      String
+  rawEmailSender       String
+  originalFileUrl      String?
+  normalizedPdfUrl     String?
+  parserVersion        String
+  parsingConfidence    Float
+  status               String   @default("parsed")
+  originalAmount       Float
+  originalCurrency     String
+  fxRate               Float?
+  fxRateDate           String?
+  fxSource             String?
+  markupPercent        Float    @default(5)
+  convertedAmount      Float?
+  convertedCurrency    String?
+  invoiceAmount        Float?
+  invoiceCurrency      String?
+  billingEntityId      String?
+  conversionStatus     String   @default("pending")
+  fallbackRateUsed     Boolean  @default(false)
+  isRefunded           Boolean  @default(false)
+  refundAmount         Float?
+  netInvoiceAmount     Float?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  billingEntity        BillingEntity? @relation(fields: [billingEntityId], references: [id])
+
+  @@index([userId, tripDate])
+  @@index([userId, provider])
+  @@index([userId, country])
+  @@index([billingEntityId])
+}
+
+model BillingEntity {
+  id                       String   @id @default(cuid())
+  userId                   String
+  legalName                String
+  billingAddress           String
+  vatOrTaxId               String?
+  contactEmail             String?
+  preferredInvoiceCurrency String   @default("EUR")
+  defaultMarkupPercent     Float    @default(5)
+  notes                    String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  receipts                 Receipt[]
+  invoiceBatches           InvoiceBatch[]
+
+  @@index([userId])
+}
+
+model InvoiceBatch {
+  id                String   @id @default(cuid())
+  userId            String
+  billingEntityId   String
+  billingEntityName String
+  invoiceCurrency   String
+  markupPercent     Float
+  subtotalOriginal  Float
+  subtotalConverted Float
+  markupAmount      Float
+  totalInvoice      Float
+  receiptCount      Int
+  status            String   @default("draft")
+  exportFileUrl     String?
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  billingEntity     BillingEntity @relation(fields: [billingEntityId], references: [id])
+
+  @@index([userId])
+  @@index([billingEntityId])
+}
+
+model ExportJob {
+  id           String   @id @default(cuid())
+  userId       String
+  format       String
+  status       String   @default("pending")
+  filters      String   @default("{}")
+  fileUrl      String?
+  receiptCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}

@@ -1,0 +1,88 @@
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import { cn } from "@/lib/utils";
+
+const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: "📊" },
+  { href: "/receipts", label: "Receipts", icon: "🧾" },
+  { href: "/exports", label: "Exports", icon: "📥" },
+  { href: "/billing", label: "Billing", icon: "🏢" },
+  { href: "/settings", label: "Settings", icon: "⚙️" },
+];
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const userName = session?.user?.name || "User";
+  const userEmail = session?.user?.email || "";
+  const initials = userName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  return (
+    <div className="flex min-h-screen">
+      <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-neutral-200/60 bg-white dark:border-neutral-800 dark:bg-neutral-950">
+        <div className="flex h-16 items-center gap-2 border-b border-neutral-200/60 px-6 dark:border-neutral-800">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 text-sm font-bold text-white dark:bg-white dark:text-neutral-900">
+            R
+          </div>
+          <span className="text-lg font-semibold tracking-tight">RideReceipt</span>
+        </div>
+
+        <nav className="flex-1 space-y-1 px-3 py-4">
+          {navItems.map((item) => {
+            const active =
+              pathname === item.href ||
+              (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-white"
+                    : "text-neutral-500 hover:bg-neutral-50 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-900"
+                )}
+              >
+                <span className="text-lg">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="border-t border-neutral-200/60 p-4 dark:border-neutral-800">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-sm font-semibold text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-neutral-900 dark:text-white">
+                {userName}
+              </div>
+              <div className="truncate text-xs text-neutral-400">{userEmail}</div>
+            </div>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              title="Sign out"
+            >
+              ↗
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <main className="ml-64 flex-1">
+        <div className="mx-auto max-w-7xl px-8 py-8">{children}</div>
+      </main>
+    </div>
+  );
+}
