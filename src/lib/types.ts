@@ -1,6 +1,6 @@
 // ─── Core Types ─────────────────────────────────────────────────────────────
 
-export type Provider = 'uber' | 'bolt';
+export type Provider = 'uber' | 'bolt' | 'waymo' | 'careem' | 'freenow';
 export type ReceiptStatus = 'parsed' | 'review' | 'failed' | 'duplicate';
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'completed';
 export type ExportFormat = 'pdf' | 'excel' | 'zip';

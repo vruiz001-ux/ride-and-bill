@@ -51,6 +51,12 @@ model User {
   email                String?              @unique
   emailVerified        DateTime?
   image                String?
+  hashedPassword       String?
+  role                 String               @default("user")
+  companyName          String?
+  companyAddress       String?
+  vatId                String?
+  timezone             String               @default("UTC")
   defaultCurrency      String               @default("EUR")
   defaultMarkupPercent Float                @default(5)
   createdAt            DateTime             @default(now())
@@ -62,6 +68,8 @@ model User {
   billingEntities      BillingEntity[]
   invoiceBatches       InvoiceBatch[]
   exportJobs           ExportJob[]
+  passwordResetTokens  PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
 }
 
 model ConnectedEmailAccount {
@@ -190,5 +198,32 @@ model ExportJob {
   completedAt  DateTime?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
   @@index([userId])
 }

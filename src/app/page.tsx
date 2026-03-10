@@ -4,15 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 const features = [
-  { title: "Auto-Detect Receipts", desc: "Connect your email. We find every Uber & Bolt receipt automatically.", icon: "📧" },
-  { title: "Multi-Currency FX", desc: "Convert PLN, GBP, CHF and 12+ currencies to EUR with real rates + configurable markup.", icon: "💱" },
+  { title: "Auto-Detect Receipts", desc: "Connect Gmail or Outlook. We find every Uber, Bolt, Waymo, Careem & FREE NOW receipt automatically.", icon: "📧" },
+  { title: "Multi-Currency FX", desc: "Convert PLN, GBP, CHF and 20+ currencies with real rates + configurable markup.", icon: "💱" },
   { title: "One-Click Export", desc: "PDF bundles with original receipts or Excel sheets. Filter by country, provider, month.", icon: "📄" },
   { title: "Billing Entities", desc: "Assign receipts to clients. Generate re-invoices with markup in their preferred currency.", icon: "🏢" },
 ];
 
 const stats = [
-  { value: "15+", label: "Currencies" },
-  { value: "2", label: "Providers" },
+  { value: "20+", label: "Currencies" },
+  { value: "5", label: "Providers" },
   { value: "< 1s", label: "Parse Time" },
   { value: "99.9%", label: "Accuracy" },
 ];
@@ -44,7 +44,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-3xl">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-1.5 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Now supporting Uber & Bolt across 15+ currencies
+              Now supporting Uber, Bolt, Waymo, Careem & FREE NOW
             </div>
             <h1 className="text-5xl font-bold tracking-tight text-neutral-900 sm:text-6xl dark:text-white">
               Ride receipts,<br />
@@ -55,7 +55,7 @@ export default function LandingPage() {
               professional PDF exports, and third-party re-invoicing — all in one place.
             </p>
             <div className="mt-10 flex items-center justify-center gap-4">
-              <Link href="/dashboard">
+              <Link href="/register">
                 <Button size="lg">Get Started Free</Button>
               </Link>
               <Link href="#features">

@@ -1,49 +1,92 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { SUPPORTED_CURRENCIES } from "@/lib/services/fx";
+import { SUPPORTED_CURRENCIES, convertAmount } from "@/lib/services/fx";
 import type { Receipt, BillingEntity } from "@/lib/types";
+
+const MONTH_NAMES = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const currentYear = new Date().getFullYear();
+const YEARS = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
 export default function ExportsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [entities, setEntities] = useState<BillingEntity[]>([]);
   const [loading, setLoading] = useState(true);
   const [format, setFormat] = useState<"pdf" | "excel">("pdf");
-  const [outputCurrency, setOutputCurrency] = useState("EUR");
+  const [outputCurrency, setOutputCurrency] = useState("PLN");
   const [applyMarkup, setApplyMarkup] = useState(true);
   const [billingEntity, setBillingEntity] = useState("all");
   const [exporting, setExporting] = useState(false);
+  const [exportMonth, setExportMonth] = useState<string>("all");
+  const [exportYear, setExportYear] = useState<string>("all");
+  const [exportHistory, setExportHistory] = useState<{ id: string; format: string; status: string; createdAt: string }[]>([]);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/receipts").then(r => r.json()),
       fetch("/api/billing").then(r => r.json()),
-    ]).then(([rData, bData]) => {
+      fetch("/api/exports").then(r => r.json()),
+    ]).then(([rData, bData, eData]) => {
       setReceipts(rData.receipts || []);
       setEntities(bData.entities || []);
+      setExportHistory(eData.jobs || []);
       setLoading(false);
     });
   }, []);
 
-  const eligibleReceipts = receipts.filter(r => r.status === "parsed");
+  const eligibleReceipts = useMemo(() => {
+    let filtered = receipts.filter(r => r.status === "parsed");
+    if (exportYear !== "all") {
+      filtered = filtered.filter(r => r.tripDate.startsWith(exportYear));
+    }
+    if (exportMonth !== "all" && exportYear !== "all") {
+      const ym = `${exportYear}-${exportMonth.padStart(2, "0")}`;
+      filtered = filtered.filter(r => r.tripDate.startsWith(ym));
+    }
+    if (billingEntity !== "all") {
+      filtered = filtered.filter(r => r.billingEntityId === billingEntity);
+    }
+    return filtered;
+  }, [receipts, exportMonth, exportYear, billingEntity]);
 
   const handleExport = async () => {
     setExporting(true);
     try {
-      await fetch("/api/exports", {
+      const res = await fetch("/api/exports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           format,
-          filters: { billingEntityId: billingEntity !== "all" ? billingEntity : undefined },
+          filters: {
+            billingEntityId: billingEntity !== "all" ? billingEntity : undefined,
+            month: exportMonth !== "all" ? exportMonth : undefined,
+            year: exportYear !== "all" ? exportYear : undefined,
+          },
           outputCurrency,
           applyMarkup,
           markupPercent: 5,
         }),
       });
+
+      if (res.ok && format === "pdf") {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `ridereceipt-${new Date().toISOString().split("T")[0]}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        // Refresh export history
+        const historyRes = await fetch("/api/exports");
+        const historyData = await historyRes.json();
+        setExportHistory(historyData.jobs || []);
+      }
     } finally {
       setExporting(false);
     }
@@ -73,7 +116,7 @@ export default function ExportsPage() {
                 <button onClick={() => setFormat("pdf")} className={`flex-1 rounded-xl border-2 p-4 text-center transition-all ${format === "pdf" ? "border-neutral-900 bg-neutral-50 dark:border-white dark:bg-neutral-800" : "border-neutral-200 dark:border-neutral-700"}`}>
                   <div className="text-2xl">📄</div>
                   <div className="mt-1 text-sm font-medium">PDF Bundle</div>
-                  <div className="text-xs text-neutral-400">Summary + original receipts</div>
+                  <div className="text-xs text-neutral-400">Summary + receipt details</div>
                 </button>
                 <button onClick={() => setFormat("excel")} className={`flex-1 rounded-xl border-2 p-4 text-center transition-all ${format === "excel" ? "border-neutral-900 bg-neutral-50 dark:border-white dark:bg-neutral-800" : "border-neutral-200 dark:border-neutral-700"}`}>
                   <div className="text-2xl">📊</div>
@@ -84,6 +127,22 @@ export default function ExportsPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Month</label>
+                <select value={exportMonth} onChange={e => setExportMonth(e.target.value)} className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+                  <option value="all">All Months</option>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1} value={String(i + 1)}>{MONTH_NAMES[i + 1]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Year</label>
+                <select value={exportYear} onChange={e => setExportYear(e.target.value)} className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+                  <option value="all">All Years</option>
+                  {YEARS.map(y => <option key={y} value={String(y)}>{y}</option>)}
+                </select>
+              </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Output Currency</label>
                 <select value={outputCurrency} onChange={e => setOutputCurrency(e.target.value)} className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800">
@@ -117,14 +176,22 @@ export default function ExportsPage() {
               <div className="mt-2 flex items-center justify-between text-sm">
                 <span className="text-neutral-500">Total (converted to {outputCurrency})</span>
                 <span className="font-semibold text-neutral-900 dark:text-white">
-                  {formatCurrency(eligibleReceipts.reduce((s, r) => s + (r.convertedAmount || r.amountTotal), 0), outputCurrency)}
+                  {formatCurrency(eligibleReceipts.reduce((s, r) => {
+                    const date = r.tripDate.split('T')[0];
+                    const fx = convertAmount(r.amountTotal, r.originalCurrency || r.currency, outputCurrency, date, 0);
+                    return s + (fx?.convertedAmount || r.amountTotal);
+                  }, 0), outputCurrency)}
                 </span>
               </div>
               {applyMarkup && (
                 <div className="mt-2 flex items-center justify-between text-sm">
                   <span className="text-neutral-500">With 5% markup</span>
                   <span className="font-semibold text-emerald-600">
-                    {formatCurrency(eligibleReceipts.reduce((s, r) => s + (r.invoiceAmount || r.amountTotal * 1.05), 0), outputCurrency)}
+                    {formatCurrency(eligibleReceipts.reduce((s, r) => {
+                      const date = r.tripDate.split('T')[0];
+                      const fx = convertAmount(r.amountTotal, r.originalCurrency || r.currency, outputCurrency, date, 5);
+                      return s + (fx?.finalAmount || r.amountTotal * 1.05);
+                    }, 0), outputCurrency)}
                   </span>
                 </div>
               )}
@@ -138,7 +205,23 @@ export default function ExportsPage() {
 
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">Export History</h2>
-          <div className="py-8 text-center text-neutral-400 text-sm">No exports yet.</div>
+          {exportHistory.length > 0 ? (
+            <div className="space-y-2">
+              {exportHistory.map(job => (
+                <div key={job.id} className="flex items-center justify-between rounded-xl border border-neutral-100 p-3 dark:border-neutral-800">
+                  <div>
+                    <div className="text-sm font-medium text-neutral-900 dark:text-white">{job.format.toUpperCase()}</div>
+                    <div className="text-xs text-neutral-400">{formatDate(job.createdAt)}</div>
+                  </div>
+                  <Badge variant={job.status === "completed" ? "success" : job.status === "failed" ? "destructive" : "warning"}>
+                    {job.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-neutral-400 text-sm">No exports yet.</div>
+          )}
         </div>
       </div>
     </div>

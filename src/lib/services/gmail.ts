@@ -37,19 +37,20 @@ export async function getGmailClient(userId: string) {
   return google.gmail({ version: 'v1', auth: oauth2Client });
 }
 
-const RECEIPT_QUERY = [
-  'from:(noreply@uber.com OR uber.receipt@uber.com OR receipts@uber.com OR noreply@bolt.eu OR receipts@bolt.eu OR no-reply@bolt.eu OR info@bolt.eu)',
-  'subject:(receipt OR trip OR ride)',
-].join(' ');
+const RECEIPT_QUERY = '(from:(noreply@uber.com OR uber.receipt@uber.com OR receipts@uber.com) OR (from:privaterelay.appleid.com uber) OR (from:bolt.eu subject:(trip OR ride OR podr OR przejazd OR trajet)) OR (from:waymo.com subject:(riding OR receipt)) OR (from:billing@careem.com subject:Receipt) OR (from:freenow.com subject:(receipt OR ride OR trip OR fahrt)))';
 
 export async function searchReceiptEmails(
   userId: string,
-  afterDate?: string
+  afterDate?: string,
+  beforeDate?: string
 ): Promise<string[]> {
   const gmail = await getGmailClient(userId);
   let query = RECEIPT_QUERY;
   if (afterDate) {
     query += ` after:${afterDate}`;
+  }
+  if (beforeDate) {
+    query += ` before:${beforeDate}`;
   }
 
   const messageIds: string[] = [];
@@ -60,6 +61,7 @@ export async function searchReceiptEmails(
       userId: 'me',
       q: query,
       maxResults: 100,
+      includeSpamTrash: true,
       pageToken,
     });
 
@@ -131,7 +133,7 @@ export async function fetchEmail(
     messageId,
     from,
     subject,
-    date: date ? new Date(date).toISOString() : new Date().toISOString(),
+    date: (() => { try { return date ? new Date(date).toISOString() : new Date().toISOString(); } catch { return new Date().toISOString(); } })(),
     htmlBody,
     textBody,
     attachments: [],

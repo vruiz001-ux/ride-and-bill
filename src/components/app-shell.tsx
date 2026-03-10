@@ -12,6 +12,8 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
+const adminNavItem = { href: "/admin", label: "Admin", icon: "🛡️" };
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data: session } = useSession();
@@ -36,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {navItems.map((item) => {
+          {[...navItems, ...(session?.user?.role === "admin" ? [adminNavItem] : [])].map((item) => {
             const active =
               pathname === item.href ||
               (item.href !== "/dashboard" && pathname.startsWith(item.href));

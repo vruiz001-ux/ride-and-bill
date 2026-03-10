@@ -7,6 +7,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatCurrency, formatDate, providerLabel, confidenceColor } from "@/lib/utils";
 import type { Receipt, BillingEntity } from "@/lib/types";
 
+const MONTH_NAMES = ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
 function statusBadge(status: string) {
   switch (status) {
     case "parsed": return <Badge variant="success">Parsed</Badge>;
@@ -24,7 +26,13 @@ export default function ReceiptsPage() {
   const [providerFilter, setProviderFilter] = useState<string>("all");
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [currencyFilter, setCurrencyFilter] = useState<string>("all");
+  const [filterMonth, setFilterMonth] = useState<string>("all");
+  const [filterYear, setFilterYear] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Receipt | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Record<string, string | number | null>>({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -39,15 +47,130 @@ export default function ReceiptsPage() {
 
   const countries = useMemo(() => [...new Set(receipts.map(r => r.country))].sort(), [receipts]);
   const currencies = useMemo(() => [...new Set(receipts.map(r => r.currency))].sort(), [receipts]);
+  const availableYears = useMemo(() => {
+    const years = new Set(receipts.map(r => r.tripDate.substring(0, 4)));
+    return [...years].sort().reverse();
+  }, [receipts]);
+  const availableMonths = useMemo(() => {
+    return Array.from({ length: 12 }, (_, i) => i + 1);
+  }, []);
 
   const filtered = useMemo(() => {
     return receipts.filter(r => {
       if (providerFilter !== "all" && r.provider !== providerFilter) return false;
       if (countryFilter !== "all" && r.country !== countryFilter) return false;
       if (currencyFilter !== "all" && r.currency !== currencyFilter) return false;
+      if (filterYear !== "all" && !r.tripDate.startsWith(filterYear)) return false;
+      if (filterMonth !== "all" && filterYear !== "all") {
+        const ym = `${filterYear}-${filterMonth.padStart(2, '0')}`;
+        if (!r.tripDate.startsWith(ym)) return false;
+      } else if (filterMonth !== "all") {
+        const m = parseInt(filterMonth);
+        const rMonth = new Date(r.tripDate).getMonth() + 1;
+        if (rMonth !== m) return false;
+      }
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
       return true;
     }).sort((a, b) => new Date(b.tripDate).getTime() - new Date(a.tripDate).getTime());
-  }, [receipts, providerFilter, countryFilter, currencyFilter]);
+  }, [receipts, providerFilter, countryFilter, currencyFilter, filterMonth, filterYear, statusFilter]);
+
+  // Monthly summary — computed from filtered receipts
+  const summary = useMemo(() => {
+    const valid = filtered.filter(r => r.status !== 'failed');
+    if (valid.length === 0) return null;
+
+    const byProvider: Record<string, { count: number; total: number; pln: number }> = {};
+    const byCurrency: Record<string, { count: number; total: number }> = {};
+    let totalTax = 0;
+    let hasTax = false;
+
+    for (const r of valid) {
+      // By provider
+      if (!byProvider[r.provider]) byProvider[r.provider] = { count: 0, total: 0, pln: 0 };
+      byProvider[r.provider].count++;
+      byProvider[r.provider].total += r.amountTotal;
+      byProvider[r.provider].pln += r.convertedAmount || 0;
+
+      // By currency
+      if (!byCurrency[r.currency]) byCurrency[r.currency] = { count: 0, total: 0 };
+      byCurrency[r.currency].count++;
+      byCurrency[r.currency].total += r.amountTotal;
+
+      // Tax
+      if (r.amountTax != null && r.amountTax > 0) {
+        totalTax += r.amountTax;
+        hasTax = true;
+      }
+    }
+
+    const totalPLN = valid.reduce((s, r) => s + (r.convertedAmount || 0), 0);
+    const totalInvoice = valid.reduce((s, r) => s + (r.invoiceAmount || 0), 0);
+
+    return {
+      count: valid.length,
+      totalPLN: Math.round(totalPLN * 100) / 100,
+      totalInvoice: Math.round(totalInvoice * 100) / 100,
+      byProvider: Object.entries(byProvider).map(([p, d]) => ({
+        provider: p, count: d.count, total: Math.round(d.total * 100) / 100, pln: Math.round(d.pln * 100) / 100,
+      })).sort((a, b) => b.pln - a.pln),
+      byCurrency: Object.entries(byCurrency).map(([c, d]) => ({
+        currency: c, count: d.count, total: Math.round(d.total * 100) / 100,
+      })),
+      totalTax: hasTax ? Math.round(totalTax * 100) / 100 : null,
+      multiCurrency: Object.keys(byCurrency).length > 1,
+    };
+  }, [filtered]);
+
+  const startEdit = () => {
+    if (!selected) return;
+    setEditForm({
+      businessPurpose: selected.businessPurpose || "",
+      notes: selected.notes || "",
+      city: selected.city,
+      country: selected.country,
+      amountTotal: selected.amountTotal,
+      pickupLocation: selected.pickupLocation || "",
+      dropoffLocation: selected.dropoffLocation || "",
+      billingEntityId: selected.billingEntityId || "",
+    });
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setEditForm({});
+  };
+
+  const saveEdit = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = { id: selected.id };
+      if (editForm.businessPurpose !== (selected.businessPurpose || "")) body.businessPurpose = editForm.businessPurpose || null;
+      if (editForm.notes !== (selected.notes || "")) body.notes = editForm.notes || null;
+      if (editForm.city !== selected.city) body.city = editForm.city;
+      if (editForm.country !== selected.country) body.country = editForm.country;
+      if (Number(editForm.amountTotal) !== selected.amountTotal) body.amountTotal = Number(editForm.amountTotal);
+      if (editForm.pickupLocation !== (selected.pickupLocation || "")) body.pickupLocation = editForm.pickupLocation || null;
+      if (editForm.dropoffLocation !== (selected.dropoffLocation || "")) body.dropoffLocation = editForm.dropoffLocation || null;
+      if (editForm.billingEntityId !== (selected.billingEntityId || "")) body.billingEntityId = editForm.billingEntityId || null;
+
+      const res = await fetch("/api/receipts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setReceipts(prev => prev.map(r => r.id === updated.id ? { ...r, ...updated } : r));
+        setSelected(prev => prev ? { ...prev, ...updated } : prev);
+        setEditing(false);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const billingEntityName = (id: string | null) => {
     if (!id) return null;
@@ -69,10 +192,21 @@ export default function ReceiptsPage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
+        <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+          <option value="all">All Months</option>
+          {availableMonths.map(m => <option key={m} value={String(m)}>{MONTH_NAMES[m]}</option>)}
+        </select>
+        <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+          <option value="all">All Years</option>
+          {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
         <select value={providerFilter} onChange={e => setProviderFilter(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
           <option value="all">All Providers</option>
           <option value="uber">Uber</option>
           <option value="bolt">Bolt</option>
+          <option value="waymo">Waymo</option>
+          <option value="careem">Careem</option>
+          <option value="freenow">FREE NOW</option>
         </select>
         <select value={countryFilter} onChange={e => setCountryFilter(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
           <option value="all">All Countries</option>
@@ -82,12 +216,85 @@ export default function ReceiptsPage() {
           <option value="all">All Currencies</option>
           {currencies.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        {(providerFilter !== "all" || countryFilter !== "all" || currencyFilter !== "all") && (
-          <Button variant="ghost" size="sm" onClick={() => { setProviderFilter("all"); setCountryFilter("all"); setCurrencyFilter("all"); }}>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+          <option value="all">All Statuses</option>
+          <option value="parsed">Parsed</option>
+          <option value="review">Needs Review</option>
+          <option value="failed">Failed</option>
+        </select>
+        {(providerFilter !== "all" || countryFilter !== "all" || currencyFilter !== "all" || filterMonth !== "all" || filterYear !== "all" || statusFilter !== "all") && (
+          <Button variant="ghost" size="sm" onClick={() => { setProviderFilter("all"); setCountryFilter("all"); setCurrencyFilter("all"); setFilterMonth("all"); setFilterYear("all"); setStatusFilter("all"); }}>
             Clear filters
           </Button>
         )}
       </div>
+
+      {summary && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              {filterMonth !== "all" && filterYear !== "all"
+                ? `${MONTH_NAMES[parseInt(filterMonth)]} ${filterYear} Summary`
+                : filterYear !== "all"
+                ? `${filterYear} Summary`
+                : filterMonth !== "all"
+                ? `${MONTH_NAMES[parseInt(filterMonth)]} Summary`
+                : "All Receipts Summary"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <div className="text-xs text-neutral-400">Receipts</div>
+                <div className="text-xl font-bold text-neutral-900 dark:text-white">{summary.count}</div>
+              </div>
+              <div>
+                <div className="text-xs text-neutral-400">Total (PLN)</div>
+                <div className="text-xl font-bold text-emerald-600">{formatCurrency(summary.totalPLN, "PLN")}</div>
+              </div>
+              <div>
+                <div className="text-xs text-neutral-400">Invoice Total</div>
+                <div className="text-xl font-bold text-neutral-900 dark:text-white">{formatCurrency(summary.totalInvoice, "PLN")}</div>
+              </div>
+              {summary.totalTax !== null && (
+                <div>
+                  <div className="text-xs text-neutral-400">Tax / VAT</div>
+                  <div className="text-xl font-bold text-neutral-900 dark:text-white">{summary.totalTax.toFixed(2)}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-neutral-100 pt-3 dark:border-neutral-800">
+              <div className="text-xs font-medium text-neutral-400 mb-2">By Provider</div>
+              <div className="space-y-1.5">
+                {summary.byProvider.map(p => (
+                  <div key={p.provider} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={p.provider as 'uber' | 'bolt'}>{providerLabel(p.provider)}</Badge>
+                      <span className="text-neutral-400">{p.count} rides</span>
+                    </div>
+                    <span className="font-medium text-neutral-900 dark:text-white">{formatCurrency(p.pln, "PLN")}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {summary.multiCurrency && (
+              <div className="border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                <div className="text-xs font-medium text-neutral-400 mb-2">By Currency</div>
+                <div className="space-y-1.5">
+                  {summary.byCurrency.map(c => (
+                    <div key={c.currency} className="flex items-center justify-between text-sm">
+                      <span className="text-neutral-500">{c.currency}</span>
+                      <span className="font-medium text-neutral-900 dark:text-white">{formatCurrency(c.total, c.currency)} <span className="text-neutral-400">({c.count})</span></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="space-y-2 lg:col-span-3">
@@ -136,10 +343,39 @@ export default function ReceiptsPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">Receipt Detail</CardTitle>
-                  <button onClick={() => setSelected(null)} className="text-neutral-400 hover:text-neutral-600">✕</button>
+                  <div className="flex items-center gap-2">
+                    {!editing && (
+                      <button onClick={startEdit} className="text-xs text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">Edit</button>
+                    )}
+                    <button onClick={() => { setSelected(null); cancelEdit(); }} className="text-neutral-400 hover:text-neutral-600">✕</button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
+                {editing ? (
+                  <div className="space-y-3">
+                    <EditField label="City" value={String(editForm.city || "")} onChange={v => setEditForm(f => ({ ...f, city: v }))} />
+                    <EditField label="Country" value={String(editForm.country || "")} onChange={v => setEditForm(f => ({ ...f, country: v }))} />
+                    <EditField label="Amount" value={String(editForm.amountTotal || "")} onChange={v => setEditForm(f => ({ ...f, amountTotal: v }))} type="number" />
+                    <EditField label="Pickup" value={String(editForm.pickupLocation || "")} onChange={v => setEditForm(f => ({ ...f, pickupLocation: v }))} />
+                    <EditField label="Dropoff" value={String(editForm.dropoffLocation || "")} onChange={v => setEditForm(f => ({ ...f, dropoffLocation: v }))} />
+                    <EditField label="Purpose" value={String(editForm.businessPurpose || "")} onChange={v => setEditForm(f => ({ ...f, businessPurpose: v }))} />
+                    <EditField label="Notes" value={String(editForm.notes || "")} onChange={v => setEditForm(f => ({ ...f, notes: v }))} />
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-neutral-400">Billing Entity</label>
+                      <select value={String(editForm.billingEntityId || "")} onChange={e => setEditForm(f => ({ ...f, billingEntityId: e.target.value }))} className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+                        <option value="">None</option>
+                        {entities.map(e => <option key={e.id} value={e.id}>{e.legalName}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button size="sm" onClick={saveEdit} disabled={saving} className="flex-1">
+                        {saving ? "Saving..." : "Save"}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={cancelEdit} className="flex-1">Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
                 <Tabs defaultValue="details">
                   <TabsList className="mb-4 w-full">
                     <TabsTrigger value="details">Details</TabsTrigger>
@@ -158,6 +394,7 @@ export default function ReceiptsPage() {
                     {selected.dropoffLocation && <Row label="To">{selected.dropoffLocation}</Row>}
                     {selected.paymentMethodMasked && <Row label="Card">{selected.paymentMethodMasked}</Row>}
                     {selected.businessPurpose && <Row label="Purpose">{selected.businessPurpose}</Row>}
+                    {selected.notes && <Row label="Notes">{selected.notes}</Row>}
                     <Row label="Confidence">
                       <span className={confidenceColor(selected.parsingConfidence)}>
                         {Math.round(selected.parsingConfidence * 100)}%
@@ -198,6 +435,7 @@ export default function ReceiptsPage() {
                     <Row label="Imported">{formatDate(selected.importDate)}</Row>
                   </TabsContent>
                 </Tabs>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -219,6 +457,15 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div className="flex items-start justify-between gap-4">
       <span className="shrink-0 text-xs font-medium text-neutral-400">{label}</span>
       <div className="text-right text-sm text-neutral-900 dark:text-white">{children}</div>
+    </div>
+  );
+}
+
+function EditField({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-neutral-400">{label}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800" />
     </div>
   );
 }

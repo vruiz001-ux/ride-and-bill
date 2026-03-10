@@ -36,7 +36,8 @@ export function providerColor(provider: string): string {
 }
 
 export function providerLabel(provider: string): string {
-  return provider === 'uber' ? 'Uber' : 'Bolt';
+  const labels: Record<string, string> = { uber: 'Uber', bolt: 'Bolt', waymo: 'Waymo', careem: 'Careem', freenow: 'FREE NOW' };
+  return labels[provider] || provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
 export function confidenceColor(confidence: number): string {

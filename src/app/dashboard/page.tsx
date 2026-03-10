@@ -7,11 +7,18 @@ import { formatCurrency, formatDate, providerLabel } from "@/lib/utils";
 import Link from "next/link";
 import type { DashboardStats, ConnectedEmailAccount } from "@/lib/types";
 
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const currentYear = new Date().getFullYear();
+const YEARS = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [accounts, setAccounts] = useState<ConnectedEmailAccount[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncMonth, setSyncMonth] = useState<string>("");
+  const [syncYear, setSyncYear] = useState<string>("");
 
   const fetchData = async () => {
     try {
@@ -30,9 +37,21 @@ export default function DashboardPage() {
 
   const handleSync = async () => {
     setSyncing(true);
+    setSyncResult(null);
     try {
-      await fetch("/api/sync", { method: "POST" });
+      const body: Record<string, string> = {};
+      if (syncMonth) body.month = syncMonth;
+      if (syncYear) body.year = syncYear;
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      setSyncResult(data.message || data.error || "Sync complete");
       await fetchData();
+    } catch {
+      setSyncResult("Sync failed — please try again");
     } finally {
       setSyncing(false);
     }
@@ -56,14 +75,45 @@ export default function DashboardPage() {
           <p className="mt-1 text-sm text-neutral-500">Your ride receipt intelligence at a glance.</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
-            <span className="mr-2">🔄</span> {syncing ? "Syncing..." : "Sync Emails"}
-          </Button>
           <Link href="/exports">
-            <Button size="sm"><span className="mr-2">📥</span> Export</Button>
+            <Button size="sm" variant="outline">Export</Button>
           </Link>
         </div>
       </div>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Sync period:</span>
+            <select
+              value={syncMonth}
+              onChange={(e) => setSyncMonth(e.target.value)}
+              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-800"
+            >
+              <option value="">All months</option>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={String(i + 1)}>{m}</option>
+              ))}
+            </select>
+            <select
+              value={syncYear}
+              onChange={(e) => setSyncYear(e.target.value)}
+              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-800"
+            >
+              <option value="">All years</option>
+              {YEARS.map((y) => (
+                <option key={y} value={String(y)}>{y}</option>
+              ))}
+            </select>
+            <Button size="sm" onClick={handleSync} disabled={syncing}>
+              {syncing ? "Syncing..." : "Sync Emails"}
+            </Button>
+            {syncResult && (
+              <span className="text-xs text-neutral-500">{syncResult}</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {account && (
         <Card>
@@ -97,15 +147,15 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardContent className="p-6">
-            <div className="text-sm font-medium text-neutral-500">Total Spend (EUR)</div>
-            <div className="mt-2 text-3xl font-bold text-neutral-900 dark:text-white">{formatCurrency(stats.totalSpend, 'EUR')}</div>
+            <div className="text-sm font-medium text-neutral-500">Total Spend (PLN)</div>
+            <div className="mt-2 text-3xl font-bold text-neutral-900 dark:text-white">{formatCurrency(stats.totalSpend, 'PLN')}</div>
             <div className="mt-2 text-xs text-neutral-400">Converted at FX rates</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
             <div className="text-sm font-medium text-neutral-500">Invoiceable</div>
-            <div className="mt-2 text-3xl font-bold text-emerald-600">{formatCurrency(stats.invoiceableTotal, 'EUR')}</div>
+            <div className="mt-2 text-3xl font-bold text-emerald-600">{formatCurrency(stats.invoiceableTotal, 'PLN')}</div>
             <div className="mt-2 text-xs text-neutral-400">With 5% markup</div>
           </CardContent>
         </Card>
@@ -132,7 +182,7 @@ export default function DashboardPage() {
                     <Badge variant={p.provider as 'uber' | 'bolt'}>{providerLabel(p.provider)}</Badge>
                     <span className="text-sm text-neutral-500">{p.count} rides</span>
                   </div>
-                  <span className="text-sm font-semibold text-neutral-900 dark:text-white">{formatCurrency(p.total, 'EUR')}</span>
+                  <span className="text-sm font-semibold text-neutral-900 dark:text-white">{formatCurrency(p.total, 'PLN')}</span>
                 </div>
               ))}
             </div>
@@ -149,7 +199,7 @@ export default function DashboardPage() {
                     <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{c.country}</span>
                     <span className="text-xs text-neutral-400">({c.count})</span>
                   </div>
-                  <span className="text-sm font-semibold text-neutral-900 dark:text-white">{formatCurrency(c.total, 'EUR')}</span>
+                  <span className="text-sm font-semibold text-neutral-900 dark:text-white">{formatCurrency(c.total, 'PLN')}</span>
                 </div>
               ))}
             </div>
@@ -167,7 +217,7 @@ export default function DashboardPage() {
                 const height = maxTotal > 0 ? (m.total / maxTotal) * 160 : 0;
                 return (
                   <div key={m.month} className="flex flex-1 flex-col items-center gap-2">
-                    <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{formatCurrency(m.total, 'EUR')}</span>
+                    <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{formatCurrency(m.total, 'PLN')}</span>
                     <div className="w-full rounded-t-lg bg-neutral-900 dark:bg-white" style={{ height: `${Math.max(height, 8)}px` }} />
                     <span className="text-xs text-neutral-400">{m.month}</span>
                     <span className="text-xs text-neutral-400">{m.count} rides</span>

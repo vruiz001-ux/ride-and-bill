@@ -53,8 +53,8 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
 
   const totalSpend = receipts.reduce((s, r) => s + (r.convertedAmount || 0), 0);
 
-  const uberReceipts = receipts.filter((r) => r.provider === 'uber');
-  const boltReceipts = receipts.filter((r) => r.provider === 'bolt');
+  const providers = ['uber', 'bolt', 'waymo', 'careem', 'freenow'] as const;
+  const byProviderMap = new Map(providers.map(p => [p, receipts.filter(r => r.provider === p)]));
 
   const byCountryMap: Record<string, { country: string; countryCode: string; count: number; total: number }> = {};
   const byCurrencyMap: Record<string, { currency: string; count: number; total: number }> = {};
@@ -85,16 +85,18 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
   return {
     totalReceipts: receipts.length,
     totalSpend: Math.round(totalSpend * 100) / 100,
-    totalSpendCurrency: 'EUR',
-    byProvider: [
-      { provider: 'uber', count: uberReceipts.length, total: Math.round(uberReceipts.reduce((s, r) => s + (r.convertedAmount || 0), 0) * 100) / 100 },
-      { provider: 'bolt', count: boltReceipts.length, total: Math.round(boltReceipts.reduce((s, r) => s + (r.convertedAmount || 0), 0) * 100) / 100 },
-    ],
+    totalSpendCurrency: 'PLN',
+    byProvider: providers
+      .map(p => {
+        const pr = byProviderMap.get(p) || [];
+        return { provider: p, count: pr.length, total: Math.round(pr.reduce((s, r) => s + (r.convertedAmount || 0), 0) * 100) / 100 };
+      })
+      .filter(p => p.count > 0),
     byMonth: Object.values(byMonthMap).sort((a, b) => a.month.localeCompare(b.month)),
     byCountry: Object.values(byCountryMap).sort((a, b) => b.total - a.total),
     byCurrency: Object.values(byCurrencyMap),
     invoiceableTotal: Math.round(invoiceableTotal * 100) / 100,
-    invoiceableCurrency: 'EUR',
+    invoiceableCurrency: 'PLN',
     recentReceipts: receipts.slice(0, 5) as DashboardStats['recentReceipts'],
     reviewCount: allReceipts.filter((r) => r.status === 'review').length,
   };

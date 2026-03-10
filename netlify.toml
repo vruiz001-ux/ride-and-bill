@@ -1,6 +1,9 @@
 [build]
-  command = "npx prisma generate && npm run build"
+  command = "npx prisma generate && node patch-libsql.cjs && npx next build --webpack"
   publish = ".next"
+
+[functions]
+  external_node_modules = ["@libsql/client"]
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"

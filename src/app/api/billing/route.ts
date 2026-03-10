@@ -2,6 +2,16 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getBillingEntities, getInvoiceBatches } from '@/lib/services/db';
+import { z } from 'zod';
+
+const createEntitySchema = z.object({
+  legalName: z.string().min(1).max(200),
+  billingAddress: z.string().min(1).max(500),
+  vatOrTaxId: z.string().max(50).optional().nullable(),
+  contactEmail: z.string().email().optional().nullable(),
+  preferredInvoiceCurrency: z.string().length(3).optional(),
+  defaultMarkupPercent: z.number().min(0).max(100).optional(),
+});
 
 export async function GET() {
   const session = await getSession();
@@ -23,12 +33,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json();
-  const { legalName, billingAddress, vatOrTaxId, contactEmail, preferredInvoiceCurrency, defaultMarkupPercent } = body;
-
-  if (!legalName || !billingAddress) {
-    return NextResponse.json({ error: 'legalName and billingAddress are required' }, { status: 400 });
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
+
+  const parsed = createEntitySchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Invalid input' }, { status: 400 });
+  }
+
+  const { legalName, billingAddress, vatOrTaxId, contactEmail, preferredInvoiceCurrency, defaultMarkupPercent } = parsed.data;
 
   const entity = await prisma.billingEntity.create({
     data: {
