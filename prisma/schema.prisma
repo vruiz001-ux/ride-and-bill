@@ -70,11 +70,116 @@ model User {
   exportJobs           ExportJob[]
   passwordResetTokens  PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  workspaceMembers     WorkspaceMember[]
+}
+
+model Workspace {
+  id                String   @id @default(cuid())
+  name              String
+  ownerUserId       String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  members           WorkspaceMember[]
+  subscription      Subscription?
+  receipts          Receipt[]
+  emailAccounts     ConnectedEmailAccount[]
+  billingEntities   BillingEntity[]
+  invoiceBatches    InvoiceBatch[]
+  exportJobs        ExportJob[]
+  usageCounters     UsageCounter[]
+  usageEvents       UsageEvent[]
+  syncRuns          SyncRun[]
+
+  @@index([ownerUserId])
+}
+
+model WorkspaceMember {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String   @default("member")
+  invitedAt   DateTime @default(now())
+  joinedAt    DateTime @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Subscription {
+  id                  String   @id @default(cuid())
+  workspaceId         String   @unique
+  plan                String   @default("free")
+  status              String   @default("active")
+  billingCycleAnchor  DateTime @default(now())
+  currentPeriodStart  DateTime @default(now())
+  currentPeriodEnd    DateTime
+  stripeCustomerId    String?
+  stripeSubscriptionId String?
+  cancelAtPeriodEnd   Boolean  @default(false)
+  trialEndsAt         DateTime?
+  customSeats         Int?
+  customInboxes       Int?
+  customReceipts      Int?
+  customRetentionDays Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([stripeCustomerId])
+  @@index([status])
+}
+
+model UsageCounter {
+  id          String   @id @default(cuid())
+  workspaceId String
+  metric      String
+  periodStart DateTime
+  periodEnd   DateTime
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, metric, periodStart])
+  @@index([workspaceId, metric])
+}
+
+model UsageEvent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  metric      String
+  delta       Int      @default(1)
+  receiptId   String?
+  details     String?
+  createdAt   DateTime @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, metric, createdAt])
+}
+
+model SyncRun {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  emailAccountId  String
+  status          String   @default("running")
+  totalScanned    Int      @default(0)
+  newReceipts     Int      @default(0)
+  skipped         Int      @default(0)
+  errors          Int      @default(0)
+  errorMessage    String?
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([emailAccountId])
 }
 
 model ConnectedEmailAccount {
   id            String   @id @default(cuid())
   userId        String
+  workspaceId   String?
   provider      String
   email         String
   accessToken   String?
@@ -85,14 +190,17 @@ model ConnectedEmailAccount {
   totalImported Int      @default(0)
   connectedAt   DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@unique([userId, email])
   @@index([userId])
+  @@index([workspaceId])
 }
 
 model Receipt {
   id                   String   @id @default(cuid())
   userId               String
+  workspaceId          String?
   provider             String
   sourceEmailAccountId String
   sourceMessageId      String   @unique
@@ -137,17 +245,21 @@ model Receipt {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace            Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   billingEntity        BillingEntity? @relation(fields: [billingEntityId], references: [id])
 
   @@index([userId, tripDate])
   @@index([userId, provider])
   @@index([userId, country])
+  @@index([workspaceId, tripDate])
+  @@index([workspaceId])
   @@index([billingEntityId])
 }
 
 model BillingEntity {
   id                       String   @id @default(cuid())
   userId                   String
+  workspaceId              String?
   legalName                String
   billingAddress           String
   vatOrTaxId               String?
@@ -158,15 +270,18 @@ model BillingEntity {
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
   user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace                Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   receipts                 Receipt[]
   invoiceBatches           InvoiceBatch[]
 
   @@index([userId])
+  @@index([workspaceId])
 }
 
 model InvoiceBatch {
   id                String   @id @default(cuid())
   userId            String
+  workspaceId       String?
   billingEntityId   String
   billingEntityName String
   invoiceCurrency   String
@@ -180,15 +295,18 @@ model InvoiceBatch {
   exportFileUrl     String?
   createdAt         DateTime @default(now())
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace         Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   billingEntity     BillingEntity @relation(fields: [billingEntityId], references: [id])
 
   @@index([userId])
+  @@index([workspaceId])
   @@index([billingEntityId])
 }
 
 model ExportJob {
   id           String   @id @default(cuid())
   userId       String
+  workspaceId  String?
   format       String
   status       String   @default("pending")
   filters      String   @default("{}")
@@ -197,8 +315,10 @@ model ExportJob {
   createdAt    DateTime @default(now())
   completedAt  DateTime?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([workspaceId])
 }
 
 model PasswordResetToken {

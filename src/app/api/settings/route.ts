@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { getUserEntitlements } from '@/lib/services/entitlements';
 
 const profileSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -35,13 +36,31 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json(user);
+  const entitlements = await getUserEntitlements(session.user.id);
+
+  return NextResponse.json({
+    ...user,
+    plan: {
+      id: entitlements.plan.id,
+      name: entitlements.plan.name,
+      status: entitlements.subscriptionStatus,
+      features: entitlements.features,
+    },
+  });
 }
 
 export async function PATCH(request: Request) {
   const session = await getSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const entitlements = await getUserEntitlements(session.user.id);
+  if (entitlements.isReadOnly) {
+    return NextResponse.json({
+      error: 'Your subscription is inactive. Please update your billing.',
+      code: 'SUBSCRIPTION_INACTIVE',
+    }, { status: 403 });
   }
 
   let body;
@@ -54,6 +73,15 @@ export async function PATCH(request: Request) {
   const parsed = profileSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
+  }
+
+  // Gate company details behind plan
+  if ((parsed.data.companyName || parsed.data.companyAddress || parsed.data.vatId) &&
+      !entitlements.features.companyDetailsInReports) {
+    return NextResponse.json({
+      error: 'Company details in reports require a paid plan.',
+      code: 'FEATURE_NOT_AVAILABLE',
+    }, { status: 403 });
   }
 
   await prisma.user.update({

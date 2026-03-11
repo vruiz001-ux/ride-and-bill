@@ -2,21 +2,33 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { PlanBadge } from "@/components/plan-badge";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: "📊" },
-  { href: "/receipts", label: "Receipts", icon: "🧾" },
-  { href: "/exports", label: "Exports", icon: "📥" },
-  { href: "/billing", label: "Billing", icon: "🏢" },
-  { href: "/settings", label: "Settings", icon: "⚙️" },
+  { href: "/dashboard", label: "Dashboard", icon: "\uD83D\uDCCA" },
+  { href: "/receipts", label: "Receipts", icon: "\uD83E\uDDFE" },
+  { href: "/exports", label: "Exports", icon: "\uD83D\uDCE5" },
+  { href: "/billing", label: "Billing", icon: "\uD83C\uDFE2" },
+  { href: "/settings", label: "Settings", icon: "\u2699\uFE0F" },
 ];
 
-const adminNavItem = { href: "/admin", label: "Admin", icon: "🛡️" };
+const adminNavItem = { href: "/admin", label: "Admin", icon: "\uD83D\uDEE1\uFE0F" };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [planId, setPlanId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/dashboard")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.plan?.id) setPlanId(data.plan.id);
+      })
+      .catch(() => {});
+  }, []);
 
   const userName = session?.user?.name || "User";
   const userEmail = session?.user?.email || "";
@@ -66,8 +78,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-neutral-900 dark:text-white">
-                {userName}
+              <div className="flex items-center gap-2">
+                <div className="truncate text-sm font-medium text-neutral-900 dark:text-white">
+                  {userName}
+                </div>
+                {planId && <PlanBadge plan={planId} />}
               </div>
               <div className="truncate text-xs text-neutral-400">{userEmail}</div>
             </div>
@@ -76,7 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
               title="Sign out"
             >
-              ↗
+              &nearr;
             </button>
           </div>
         </div>

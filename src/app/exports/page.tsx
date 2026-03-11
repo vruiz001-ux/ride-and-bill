@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { UpgradePrompt } from "@/components/upgrade-prompt";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { SUPPORTED_CURRENCIES, convertAmount } from "@/lib/services/fx";
 import type { Receipt, BillingEntity } from "@/lib/types";
@@ -11,11 +12,20 @@ const MONTH_NAMES = ["", "January", "February", "March", "April", "May", "June",
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
+interface PlanFeatures {
+  fullPdfExport: boolean;
+  summaryPdfExport: boolean;
+  csvExport: boolean;
+  companyDetailsInReports: boolean;
+  brandedReports: boolean;
+  [key: string]: boolean;
+}
+
 export default function ExportsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [entities, setEntities] = useState<BillingEntity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [format, setFormat] = useState<"pdf" | "excel">("pdf");
+  const [format, setFormat] = useState<"pdf" | "csv">("pdf");
   const [outputCurrency, setOutputCurrency] = useState("PLN");
   const [applyMarkup, setApplyMarkup] = useState(true);
   const [billingEntity, setBillingEntity] = useState("all");
@@ -23,16 +33,24 @@ export default function ExportsPage() {
   const [exportMonth, setExportMonth] = useState<string>("all");
   const [exportYear, setExportYear] = useState<string>("all");
   const [exportHistory, setExportHistory] = useState<{ id: string; format: string; status: string; createdAt: string }[]>([]);
+  const [features, setFeatures] = useState<PlanFeatures | null>(null);
+  const [planName, setPlanName] = useState<string>("");
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/receipts").then(r => r.json()),
       fetch("/api/billing").then(r => r.json()),
       fetch("/api/exports").then(r => r.json()),
-    ]).then(([rData, bData, eData]) => {
+      fetch("/api/dashboard").then(r => r.json()),
+    ]).then(([rData, bData, eData, dData]) => {
       setReceipts(rData.receipts || []);
       setEntities(bData.entities || []);
       setExportHistory(eData.jobs || []);
+      if (dData.plan) {
+        setFeatures(dData.plan.features);
+        setPlanName(dData.plan.name);
+      }
       setLoading(false);
     });
   }, []);
@@ -54,6 +72,7 @@ export default function ExportsPage() {
 
   const handleExport = async () => {
     setExporting(true);
+    setExportError(null);
     try {
       const res = await fetch("/api/exports", {
         method: "POST",
@@ -71,7 +90,13 @@ export default function ExportsPage() {
         }),
       });
 
-      if (res.ok && format === "pdf") {
+      if (!res.ok) {
+        const data = await res.json();
+        setExportError(data.error || "Export failed");
+        return;
+      }
+
+      if (format === "pdf") {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -81,12 +106,21 @@ export default function ExportsPage() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-
-        // Refresh export history
-        const historyRes = await fetch("/api/exports");
-        const historyData = await historyRes.json();
-        setExportHistory(historyData.jobs || []);
+      } else if (format === "csv") {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `ridereceipt-${new Date().toISOString().split("T")[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       }
+
+      const historyRes = await fetch("/api/exports");
+      const historyData = await historyRes.json();
+      setExportHistory(historyData.jobs || []);
     } finally {
       setExporting(false);
     }
@@ -96,12 +130,23 @@ export default function ExportsPage() {
     return <div className="flex items-center justify-center py-24 text-neutral-400">Loading exports...</div>;
   }
 
+  const canFullPdf = features?.fullPdfExport ?? false;
+  const canCsv = features?.csvExport ?? false;
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">Exports</h1>
-        <p className="mt-1 text-sm text-neutral-500">Generate PDF bundles or Excel reports with multi-currency conversion.</p>
+        <p className="mt-1 text-sm text-neutral-500">
+          Generate PDF bundles or CSV reports with multi-currency conversion.
+        </p>
       </div>
+
+      {exportError && (
+        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-400">
+          {exportError}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -114,14 +159,23 @@ export default function ExportsPage() {
               <label className="mb-2 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Format</label>
               <div className="flex gap-3">
                 <button onClick={() => setFormat("pdf")} className={`flex-1 rounded-xl border-2 p-4 text-center transition-all ${format === "pdf" ? "border-neutral-900 bg-neutral-50 dark:border-white dark:bg-neutral-800" : "border-neutral-200 dark:border-neutral-700"}`}>
-                  <div className="text-2xl">📄</div>
-                  <div className="mt-1 text-sm font-medium">PDF Bundle</div>
-                  <div className="text-xs text-neutral-400">Summary + receipt details</div>
+                  <div className="text-2xl">&#x1F4C4;</div>
+                  <div className="mt-1 text-sm font-medium">
+                    {canFullPdf ? "PDF Bundle" : "Summary PDF"}
+                  </div>
+                  <div className="text-xs text-neutral-400">
+                    {canFullPdf ? "Summary + receipt details" : "Summary only (upgrade for full)"}
+                  </div>
                 </button>
-                <button onClick={() => setFormat("excel")} className={`flex-1 rounded-xl border-2 p-4 text-center transition-all ${format === "excel" ? "border-neutral-900 bg-neutral-50 dark:border-white dark:bg-neutral-800" : "border-neutral-200 dark:border-neutral-700"}`}>
-                  <div className="text-2xl">📊</div>
-                  <div className="mt-1 text-sm font-medium">Excel Report</div>
-                  <div className="text-xs text-neutral-400">Full data with FX breakdown</div>
+                <button
+                  onClick={() => canCsv && setFormat("csv")}
+                  className={`flex-1 rounded-xl border-2 p-4 text-center transition-all ${!canCsv ? "opacity-50 cursor-not-allowed" : ""} ${format === "csv" ? "border-neutral-900 bg-neutral-50 dark:border-white dark:bg-neutral-800" : "border-neutral-200 dark:border-neutral-700"}`}
+                >
+                  <div className="text-2xl">&#x1F4CA;</div>
+                  <div className="mt-1 text-sm font-medium">CSV Report</div>
+                  <div className="text-xs text-neutral-400">
+                    {canCsv ? "Full data with FX breakdown" : "Requires Solo plan or higher"}
+                  </div>
                 </button>
               </div>
             </div>
@@ -146,7 +200,7 @@ export default function ExportsPage() {
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Output Currency</label>
                 <select value={outputCurrency} onChange={e => setOutputCurrency(e.target.value)} className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800">
-                  {SUPPORTED_CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
+                  {SUPPORTED_CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.code} &mdash; {c.name}</option>)}
                 </select>
               </div>
               <div>
@@ -197,8 +251,16 @@ export default function ExportsPage() {
               )}
             </div>
 
+            {!canFullPdf && format === "pdf" && (
+              <UpgradePrompt
+                message="Free plan exports include summary only."
+                feature="Full PDF with receipt details"
+                currentPlan={planName}
+              />
+            )}
+
             <Button className="w-full" size="lg" onClick={handleExport} disabled={exporting || eligibleReceipts.length === 0}>
-              {exporting ? "Generating..." : `Generate ${format === "pdf" ? "PDF Bundle" : "Excel Report"}`}
+              {exporting ? "Generating..." : `Generate ${format === "pdf" ? (canFullPdf ? "PDF Bundle" : "Summary PDF") : "CSV Report"}`}
             </Button>
           </CardContent>
         </Card>

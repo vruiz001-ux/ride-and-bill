@@ -1,12 +1,12 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatCurrency, formatDate, providerLabel } from '@/lib/utils';
-import { getReceipts } from '@/lib/services/db';
 import { convertAmount } from '@/lib/services/fx';
 import { prisma } from '@/lib/prisma';
 
 interface PdfOptions {
   userId: string;
+  workspaceId: string;
   month?: number;
   year?: number;
   provider?: string;
@@ -14,10 +14,20 @@ interface PdfOptions {
   outputCurrency: string;
   applyMarkup: boolean;
   markupPercent: number;
+  summaryOnly?: boolean;
+  includeCompanyDetails?: boolean;
+  includeBranding?: boolean;
+  retentionCutoff?: Date;
 }
 
 export async function generatePdfExport(options: PdfOptions): Promise<Buffer> {
-  const { userId, month, year, provider, currency, outputCurrency, applyMarkup, markupPercent } = options;
+  const {
+    userId, workspaceId, month, year, provider, currency,
+    outputCurrency, applyMarkup, markupPercent,
+    summaryOnly = false,
+    includeCompanyDetails = true,
+    retentionCutoff,
+  } = options;
 
   // Fetch user info for header
   const user = await prisma.user.findUnique({
@@ -25,24 +35,26 @@ export async function generatePdfExport(options: PdfOptions): Promise<Buffer> {
     select: { name: true, email: true, companyName: true, companyAddress: true, vatId: true },
   });
 
-  // Fetch receipts with filters
-  const allReceipts = await getReceipts(userId, {
-    provider: provider || undefined,
-    currency: currency || undefined,
+  // Build query with retention cutoff
+  const where: Record<string, unknown> = { workspaceId, status: { not: 'failed' } };
+  if (provider) where.provider = provider;
+  if (currency) where.currency = currency;
+  if (retentionCutoff) {
+    where.tripDate = { gte: retentionCutoff };
+  }
+
+  let receipts = await prisma.receipt.findMany({
+    where,
+    orderBy: { tripDate: 'asc' },
   });
 
   // Filter by month/year
-  let receipts = allReceipts.filter(r => r.status !== 'failed');
   if (year) {
-    receipts = receipts.filter(r => r.tripDate.startsWith(String(year)));
+    receipts = receipts.filter(r => r.tripDate.getFullYear() === year);
   }
   if (month && year) {
-    const ym = `${year}-${String(month).padStart(2, '0')}`;
-    receipts = receipts.filter(r => r.tripDate.startsWith(ym));
+    receipts = receipts.filter(r => r.tripDate.getFullYear() === year && r.tripDate.getMonth() + 1 === month);
   }
-
-  // Sort chronologically
-  receipts.sort((a, b) => new Date(a.tripDate).getTime() - new Date(b.tripDate).getTime());
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -57,15 +69,15 @@ export async function generatePdfExport(options: PdfOptions): Promise<Buffer> {
   doc.setTextColor(100);
 
   let headerY = 42;
-  if (user?.companyName) {
+  if (includeCompanyDetails && user?.companyName) {
     doc.text(user.companyName, 20, headerY);
     headerY += 5;
   }
-  if (user?.companyAddress) {
+  if (includeCompanyDetails && user?.companyAddress) {
     doc.text(user.companyAddress, 20, headerY);
     headerY += 5;
   }
-  if (user?.vatId) {
+  if (includeCompanyDetails && user?.vatId) {
     doc.text(`VAT/Tax ID: ${user.vatId}`, 20, headerY);
     headerY += 5;
   }
@@ -88,6 +100,13 @@ export async function generatePdfExport(options: PdfOptions): Promise<Buffer> {
   headerY += 5;
   doc.text(`Output Currency: ${outputCurrency}`, 20, headerY);
 
+  if (summaryOnly) {
+    headerY += 5;
+    doc.setTextColor(150);
+    doc.text('Summary report — upgrade for full receipt details', 20, headerY);
+    doc.setTextColor(100);
+  }
+
   // ─── Summary Section ──────────────────────────────────
   headerY += 12;
   doc.setFontSize(14);
@@ -101,10 +120,11 @@ export async function generatePdfExport(options: PdfOptions): Promise<Buffer> {
 
   // Convert each receipt to the requested output currency
   const converted = receipts.map(r => {
-    const date = r.tripDate.split('T')[0];
+    const date = r.tripDate.toISOString().split('T')[0];
     const fx = convertAmount(r.amountTotal, r.originalCurrency || r.currency, outputCurrency, date, markupPercent);
     return {
       ...r,
+      tripDateStr: r.tripDate.toISOString(),
       outConverted: fx?.convertedAmount ?? r.amountTotal,
       outInvoice: fx?.finalAmount ?? r.amountTotal * (1 + markupPercent / 100),
     };
@@ -203,40 +223,42 @@ export async function generatePdfExport(options: PdfOptions): Promise<Buffer> {
     });
   }
 
-  // ─── Detailed Receipt Table ──────────────────────────
-  doc.addPage();
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0);
-  doc.text('Receipt Details', 20, 20);
+  // ─── Detailed Receipt Table (only for paid plans) ──────────────────────
+  if (!summaryOnly) {
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0);
+    doc.text('Receipt Details', 20, 20);
 
-  const tableBody = converted.map(r => [
-    formatDate(r.tripDate),
-    providerLabel(r.provider),
-    `${r.city}, ${r.countryCode}`,
-    formatCurrency(r.amountTotal, r.currency),
-    formatCurrency(r.outConverted, outputCurrency),
-    applyMarkup ? formatCurrency(r.outInvoice, outputCurrency) : '—',
-  ]);
+    const tableBody = converted.map(r => [
+      formatDate(r.tripDateStr),
+      providerLabel(r.provider),
+      `${r.city}, ${r.countryCode}`,
+      formatCurrency(r.amountTotal, r.currency),
+      formatCurrency(r.outConverted, outputCurrency),
+      applyMarkup ? formatCurrency(r.outInvoice, outputCurrency) : '\u2014',
+    ]);
 
-  autoTable(doc, {
-    startY: 28,
-    head: [['Date', 'Provider', 'Location', 'Original', 'Converted', applyMarkup ? 'Invoice' : '']],
-    body: tableBody,
-    theme: 'striped',
-    styles: { fontSize: 8, cellPadding: 2.5 },
-    headStyles: { fillColor: [23, 23, 23], textColor: [255, 255, 255], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [250, 250, 250] },
-    margin: { left: 14, right: 14 },
-    columnStyles: {
-      0: { cellWidth: 24 },
-      1: { cellWidth: 22 },
-      2: { cellWidth: 'auto' },
-      3: { halign: 'right', cellWidth: 28 },
-      4: { halign: 'right', cellWidth: 28 },
-      5: { halign: 'right', cellWidth: 28 },
-    },
-  });
+    autoTable(doc, {
+      startY: 28,
+      head: [['Date', 'Provider', 'Location', 'Original', 'Converted', applyMarkup ? 'Invoice' : '']],
+      body: tableBody,
+      theme: 'striped',
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: [23, 23, 23], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      margin: { left: 14, right: 14 },
+      columnStyles: {
+        0: { cellWidth: 24 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 'auto' },
+        3: { halign: 'right', cellWidth: 28 },
+        4: { halign: 'right', cellWidth: 28 },
+        5: { halign: 'right', cellWidth: 28 },
+      },
+    });
+  }
 
   // ─── Footer on each page ──────────────────────────────
   const pageCount = doc.getNumberOfPages();
@@ -245,7 +267,7 @@ export async function generatePdfExport(options: PdfOptions): Promise<Buffer> {
     doc.setFontSize(8);
     doc.setTextColor(150);
     doc.text(
-      `RideReceipt — Page ${i} of ${pageCount}`,
+      `RideReceipt \u2014 Page ${i} of ${pageCount}`,
       pageWidth / 2,
       doc.internal.pageSize.getHeight() - 10,
       { align: 'center' }

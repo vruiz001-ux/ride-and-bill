@@ -10,28 +10,19 @@ import { isCareemReceipt, parseCareemReceipt } from '@/lib/parsers/careem';
 import { isFreeNowReceipt, parseFreeNowReceipt } from '@/lib/parsers/freenow';
 import { convertAmount } from '@/lib/services/fx';
 import { rateLimit } from '@/lib/rate-limit';
+import { getUserEntitlements, checkCanSync, resolveUserWorkspace } from '@/lib/services/entitlements';
+import { checkReceiptQuota, incrementUsage, getBillingPeriod } from '@/lib/services/usage';
 
 export async function POST(request: Request) {
-  let userId: string;
+  const session = await getSession();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const userId = session.user.id;
 
-  // Allow admin trigger via secret key (for CLI sync)
-  const url = new URL(request.url);
-  const adminKey = url.searchParams.get('key');
-  if (adminKey && adminKey === process.env.NEXTAUTH_SECRET) {
-    const user = await prisma.user.findFirst();
-    if (!user) return NextResponse.json({ error: 'No user found' }, { status: 400 });
-    userId = user.id;
-  } else {
-    const session = await getSession();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    userId = session.user.id;
-
-    // Rate limit: 10 syncs per minute per user
-    if (!rateLimit(`sync:${userId}`, 10, 60_000)) {
-      return NextResponse.json({ error: 'Too many sync requests. Please wait a moment.' }, { status: 429 });
-    }
+  // Rate limit: 10 syncs per minute per user
+  if (!rateLimit(`sync:${userId}`, 10, 60_000)) {
+    return NextResponse.json({ error: 'Too many sync requests. Please wait a moment.' }, { status: 429 });
   }
 
   // Parse optional month/year/provider filters from request body
@@ -42,18 +33,39 @@ export async function POST(request: Request) {
     const body = await request.json();
     if (body.month) month = parseInt(body.month);
     if (body.year) year = parseInt(body.year);
-    if (body.provider) emailProvider = body.provider; // 'gmail' or 'outlook'
+    if (body.provider) emailProvider = body.provider;
   } catch {
     // No body or invalid JSON — sync all
   }
 
-  // Validate month (1-12)
   if (month !== undefined && (month < 1 || month > 12 || isNaN(month))) month = undefined;
-  // If month is set without year, default to current year
   if (month && !year) year = new Date().getFullYear();
 
-  // Determine which email provider to sync
-  const syncProvider = emailProvider || 'gmail';
+  const syncProvider = (emailProvider || 'gmail') as 'gmail' | 'outlook';
+
+  // ─── Entitlement checks ──────────────────────────────────────────────────
+  const entitlements = await getUserEntitlements(userId);
+  const workspaceId = entitlements.workspaceId;
+
+  const syncError = checkCanSync(entitlements, syncProvider);
+  if (syncError) {
+    return NextResponse.json({ error: syncError.message, code: syncError.code }, { status: 403 });
+  }
+
+  // Check receipt quota before starting
+  const subscription = await prisma.subscription.findUnique({ where: { workspaceId } });
+  const anchor = subscription?.billingCycleAnchor ?? new Date();
+  const { start: periodStart, end: periodEnd } = getBillingPeriod(anchor);
+  const quota = await checkReceiptQuota(workspaceId, entitlements.maxReceiptsPerMonth, periodStart, periodEnd);
+
+  if (!quota.allowed) {
+    return NextResponse.json({
+      error: `Monthly receipt limit reached (${quota.current}/${quota.limit}). Upgrade your plan for more receipts.`,
+      code: 'RECEIPT_LIMIT_REACHED',
+      current: quota.current,
+      limit: quota.limit,
+    }, { status: 403 });
+  }
 
   // Find or create connected email account record
   let emailAccount = await prisma.connectedEmailAccount.findFirst({
@@ -72,6 +84,7 @@ export async function POST(request: Request) {
     emailAccount = await prisma.connectedEmailAccount.create({
       data: {
         userId,
+        workspaceId,
         provider: syncProvider,
         email: user?.email || 'unknown',
         status: 'active',
@@ -84,6 +97,15 @@ export async function POST(request: Request) {
     data: { syncStatus: 'syncing' },
   });
 
+  // Create sync run record
+  const syncRun = await prisma.syncRun.create({
+    data: {
+      workspaceId,
+      emailAccountId: emailAccount.id,
+      status: 'running',
+    },
+  });
+
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     const targetCurrency = user?.defaultCurrency || 'EUR';
@@ -94,19 +116,15 @@ export async function POST(request: Request) {
     let beforeDate: string | undefined;
 
     if (year && month) {
-      // Gmail after: is exclusive, so use last day of previous month
-      // e.g. month=3, year=2026 → after:2026/02/28 before:2026/04/01
-      const lastDayPrevMonth = new Date(year, month - 1, 0); // day 0 of month = last day of prev month
+      const lastDayPrevMonth = new Date(year, month - 1, 0);
       afterDate = `${lastDayPrevMonth.getFullYear()}/${String(lastDayPrevMonth.getMonth() + 1).padStart(2, '0')}/${String(lastDayPrevMonth.getDate()).padStart(2, '0')}`;
       const nextMonth = month === 12 ? 1 : month + 1;
       const nextYear = month === 12 ? year + 1 : year;
       beforeDate = `${nextYear}/${String(nextMonth).padStart(2, '0')}/01`;
     } else if (year) {
-      // Full year — after: last day of previous year
       afterDate = `${year - 1}/12/31`;
       beforeDate = `${year + 1}/01/01`;
     } else if (!month && !year) {
-      // Default: use lastSyncAt for incremental sync
       if (emailAccount.lastSyncAt) {
         afterDate = emailAccount.lastSyncAt.toISOString().split('T')[0].replace(/-/g, '/');
       }
@@ -119,11 +137,18 @@ export async function POST(request: Request) {
     let newReceipts = 0;
     let skipped = 0;
     let totalScanned = 0;
+    let errors = 0;
 
     for (const messageId of messageIds) {
       totalScanned++;
 
-      // Check for duplicate
+      // Re-check quota during sync (stop gracefully when limit hit)
+      const currentQuota = await checkReceiptQuota(workspaceId, entitlements.maxReceiptsPerMonth, periodStart, periodEnd);
+      if (!currentQuota.allowed) {
+        break; // Stop gracefully, don't fail entire sync
+      }
+
+      // Check for duplicate (deduplication by sourceMessageId)
       const existing = await prisma.receipt.findUnique({
         where: { sourceMessageId: messageId },
       });
@@ -132,83 +157,89 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Fetch the full email
-      const email = syncProvider === 'outlook'
-        ? await fetchOutlookEmail(userId, messageId)
-        : await fetchEmail(userId, messageId);
+      try {
+        const email = syncProvider === 'outlook'
+          ? await fetchOutlookEmail(userId, messageId)
+          : await fetchEmail(userId, messageId);
 
-      // Detect provider and parse
-      let parsed = null;
-      if (isUberReceipt(email)) {
-        parsed = parseUberReceipt(email);
-      } else if (isBoltReceipt(email)) {
-        parsed = parseBoltReceipt(email);
-      } else if (isWaymoReceipt(email)) {
-        parsed = parseWaymoReceipt(email);
-      } else if (isCareemReceipt(email)) {
-        parsed = parseCareemReceipt(email);
-      } else if (isFreeNowReceipt(email)) {
-        parsed = parseFreeNowReceipt(email);
+        // Detect provider and parse
+        let parsed = null;
+        if (isUberReceipt(email)) {
+          parsed = parseUberReceipt(email);
+        } else if (isBoltReceipt(email)) {
+          parsed = parseBoltReceipt(email);
+        } else if (isWaymoReceipt(email)) {
+          parsed = parseWaymoReceipt(email);
+        } else if (isCareemReceipt(email)) {
+          parsed = parseCareemReceipt(email);
+        } else if (isFreeNowReceipt(email)) {
+          parsed = parseFreeNowReceipt(email);
+        }
+
+        if (!parsed) continue;
+
+        const status = parsed.confidence < 0.5 || parsed.amountTotal === 0 ? 'review' : 'parsed';
+
+        // FX conversion
+        let fxData = null;
+        if (parsed.amountTotal > 0) {
+          const receiptDate = new Date(parsed.tripDate).toISOString().split('T')[0];
+          fxData = convertAmount(
+            parsed.amountTotal,
+            parsed.currency,
+            targetCurrency,
+            receiptDate,
+            markupPercent
+          );
+        }
+
+        const receipt = await prisma.receipt.create({
+          data: {
+            userId,
+            workspaceId,
+            provider: parsed.provider,
+            sourceEmailAccountId: emailAccount.id,
+            sourceMessageId: messageId,
+            receiptExternalId: parsed.receiptExternalId,
+            tripDate: new Date(parsed.tripDate),
+            country: parsed.country,
+            countryCode: parsed.countryCode,
+            city: parsed.city,
+            pickupLocation: parsed.pickupLocation,
+            dropoffLocation: parsed.dropoffLocation,
+            amountTotal: parsed.amountTotal,
+            amountTax: parsed.amountTax,
+            currency: parsed.currency,
+            paymentMethodMasked: parsed.paymentMethodMasked,
+            tags: '',
+            rawEmailSubject: email.subject,
+            rawEmailSender: email.from,
+            parserVersion: parsed.parserVersion,
+            parsingConfidence: parsed.confidence,
+            status,
+            originalAmount: parsed.amountTotal,
+            originalCurrency: parsed.currency,
+            fxRate: fxData?.fxRate ?? null,
+            fxRateDate: fxData?.fxRateDate ?? null,
+            fxSource: fxData?.fxSource ?? null,
+            markupPercent,
+            convertedAmount: fxData?.convertedAmount ?? null,
+            convertedCurrency: fxData ? targetCurrency : null,
+            invoiceAmount: fxData?.finalAmount ?? null,
+            invoiceCurrency: fxData ? targetCurrency : null,
+            conversionStatus: fxData ? (fxData.fallbackUsed ? 'fallback' : 'converted') : 'failed',
+            fallbackRateUsed: fxData?.fallbackUsed ?? false,
+          },
+        });
+
+        // Increment usage counter (idempotent per receiptId)
+        await incrementUsage(workspaceId, 'receipts_imported', periodStart, periodEnd, receipt.id);
+        newReceipts++;
+      } catch {
+        errors++;
       }
 
-      if (!parsed) continue;
-
-      const status = parsed.confidence < 0.5 || parsed.amountTotal === 0 ? 'review' : 'parsed';
-
-      // FX conversion
-      let fxData = null;
-      if (parsed.amountTotal > 0) {
-        const receiptDate = new Date(parsed.tripDate).toISOString().split('T')[0];
-        fxData = convertAmount(
-          parsed.amountTotal,
-          parsed.currency,
-          targetCurrency,
-          receiptDate,
-          markupPercent
-        );
-      }
-
-      await prisma.receipt.create({
-        data: {
-          userId,
-          provider: parsed.provider,
-          sourceEmailAccountId: emailAccount.id,
-          sourceMessageId: messageId,
-          receiptExternalId: parsed.receiptExternalId,
-          tripDate: new Date(parsed.tripDate),
-          country: parsed.country,
-          countryCode: parsed.countryCode,
-          city: parsed.city,
-          pickupLocation: parsed.pickupLocation,
-          dropoffLocation: parsed.dropoffLocation,
-          amountTotal: parsed.amountTotal,
-          amountTax: parsed.amountTax,
-          currency: parsed.currency,
-          paymentMethodMasked: parsed.paymentMethodMasked,
-          tags: '',
-          rawEmailSubject: email.subject,
-          rawEmailSender: email.from,
-          parserVersion: parsed.parserVersion,
-          parsingConfidence: parsed.confidence,
-          status,
-          originalAmount: parsed.amountTotal,
-          originalCurrency: parsed.currency,
-          fxRate: fxData?.fxRate ?? null,
-          fxRateDate: fxData?.fxRateDate ?? null,
-          fxSource: fxData?.fxSource ?? null,
-          markupPercent,
-          convertedAmount: fxData?.convertedAmount ?? null,
-          convertedCurrency: fxData ? targetCurrency : null,
-          invoiceAmount: fxData?.finalAmount ?? null,
-          invoiceCurrency: fxData ? targetCurrency : null,
-          conversionStatus: fxData ? (fxData.fallbackUsed ? 'fallback' : 'converted') : 'failed',
-          fallbackRateUsed: fxData?.fallbackUsed ?? false,
-        },
-      });
-
-      newReceipts++;
-
-      // Rate limiting
+      // Rate limiting between API calls
       await new Promise((r) => setTimeout(r, 100));
     }
 
@@ -221,17 +252,39 @@ export async function POST(request: Request) {
       },
     });
 
+    await prisma.syncRun.update({
+      where: { id: syncRun.id },
+      data: {
+        status: 'completed',
+        totalScanned,
+        newReceipts,
+        skipped,
+        errors,
+        completedAt: new Date(),
+      },
+    });
+
     return NextResponse.json({
       status: 'completed',
       newReceipts,
       skipped,
       totalScanned,
+      errors,
       message: `Sync complete. ${newReceipts} new receipts imported, ${skipped} duplicates skipped from ${totalScanned} emails.`,
     });
   } catch (error) {
     await prisma.connectedEmailAccount.update({
       where: { id: emailAccount.id },
       data: { syncStatus: 'error' },
+    });
+
+    await prisma.syncRun.update({
+      where: { id: syncRun.id },
+      data: {
+        status: 'failed',
+        errorMessage: error instanceof Error ? error.message : 'Sync failed',
+        completedAt: new Date(),
+      },
     });
 
     const message = error instanceof Error ? error.message : 'Sync failed';

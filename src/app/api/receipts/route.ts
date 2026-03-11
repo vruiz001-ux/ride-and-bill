@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getReceipts, tagsToArray } from '@/lib/services/db';
+import { tagsToArray } from '@/lib/services/db';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { getUserEntitlements } from '@/lib/services/entitlements';
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -10,17 +11,37 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const entitlements = await getUserEntitlements(session.user.id);
   const { searchParams } = new URL(request.url);
 
-  const receipts = await getReceipts(session.user.id, {
-    provider: searchParams.get('provider') || undefined,
-    country: searchParams.get('country') || undefined,
-    currency: searchParams.get('currency') || undefined,
-    status: searchParams.get('status') || undefined,
-    billingEntityId: searchParams.get('billingEntityId') || undefined,
+  // Build query scoped to workspace + retention
+  const where: Record<string, unknown> = {
+    workspaceId: entitlements.workspaceId,
+    tripDate: { gte: entitlements.retentionCutoff },
+  };
+
+  if (searchParams.get('provider')) where.provider = searchParams.get('provider');
+  if (searchParams.get('country')) where.country = searchParams.get('country');
+  if (searchParams.get('currency')) where.currency = searchParams.get('currency');
+  if (searchParams.get('status')) where.status = searchParams.get('status');
+  if (searchParams.get('billingEntityId')) where.billingEntityId = searchParams.get('billingEntityId');
+
+  const receipts = await prisma.receipt.findMany({
+    where,
+    orderBy: { tripDate: 'desc' },
   });
 
-  return NextResponse.json({ receipts, total: receipts.length });
+  return NextResponse.json({
+    receipts: receipts.map(r => ({
+      ...r,
+      tripDate: r.tripDate.toISOString(),
+      importDate: r.importDate.toISOString(),
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      tags: tagsToArray(r.tags),
+    })),
+    total: receipts.length,
+  });
 }
 
 const receiptUpdateSchema = z.object({
@@ -58,13 +79,32 @@ export async function PATCH(request: Request) {
   }
 
   const { id, tags, ...updateData } = parsed.data;
+  const entitlements = await getUserEntitlements(session.user.id);
 
-  // Verify ownership
+  // Verify ownership via workspace
   const existing = await prisma.receipt.findFirst({
-    where: { id, userId: session.user.id },
+    where: { id, workspaceId: entitlements.workspaceId },
   });
   if (!existing) {
     return NextResponse.json({ error: 'Receipt not found' }, { status: 404 });
+  }
+
+  // Check read-only mode
+  if (entitlements.isReadOnly) {
+    return NextResponse.json({
+      error: 'Your subscription is inactive. Please update your billing to edit receipts.',
+      code: 'SUBSCRIPTION_INACTIVE',
+    }, { status: 403 });
+  }
+
+  // Validate tags feature availability
+  if (tags !== undefined && tags.some(t => t === 'business' || t === 'personal')) {
+    if (!entitlements.features.businessPersonalTags) {
+      return NextResponse.json({
+        error: 'Business/personal tags require Pro plan or higher.',
+        code: 'FEATURE_NOT_AVAILABLE',
+      }, { status: 403 });
+    }
   }
 
   const data: Record<string, unknown> = { ...updateData };

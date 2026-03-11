@@ -21,14 +21,27 @@ export async function getReceipts(
     currency?: string;
     status?: string;
     billingEntityId?: string;
+    workspaceId?: string;
+    retentionCutoff?: Date;
   } = {}
 ) {
-  const where: Record<string, unknown> = { userId };
+  const where: Record<string, unknown> = {};
+
+  // Prefer workspace scoping, fall back to userId
+  if (filters.workspaceId) {
+    where.workspaceId = filters.workspaceId;
+  } else {
+    where.userId = userId;
+  }
+
   if (filters.provider) where.provider = filters.provider;
   if (filters.country) where.country = filters.country;
   if (filters.currency) where.currency = filters.currency;
   if (filters.status) where.status = filters.status;
   if (filters.billingEntityId) where.billingEntityId = filters.billingEntityId;
+  if (filters.retentionCutoff) {
+    where.tripDate = { gte: filters.retentionCutoff };
+  }
 
   const receipts = await prisma.receipt.findMany({
     where,
@@ -47,8 +60,14 @@ export async function getReceipts(
 
 // ─── Dashboard Stats ──────────────────────────────────────────────────────────
 
-export async function getDashboardStats(userId: string): Promise<DashboardStats> {
-  const allReceipts = await getReceipts(userId);
+export async function getDashboardStats(
+  userId: string,
+  options: { workspaceId?: string; retentionCutoff?: Date } = {}
+): Promise<DashboardStats> {
+  const allReceipts = await getReceipts(userId, {
+    workspaceId: options.workspaceId,
+    retentionCutoff: options.retentionCutoff,
+  });
   const receipts = allReceipts.filter((r) => r.status !== 'failed');
 
   const totalSpend = receipts.reduce((s, r) => s + (r.convertedAmount || 0), 0);
@@ -61,17 +80,14 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
   const byMonthMap: Record<string, { month: string; count: number; total: number }> = {};
 
   for (const r of receipts) {
-    // Country
     if (!byCountryMap[r.country]) byCountryMap[r.country] = { country: r.country, countryCode: r.countryCode, count: 0, total: 0 };
     byCountryMap[r.country].count++;
     byCountryMap[r.country].total += r.convertedAmount || 0;
 
-    // Currency
     if (!byCurrencyMap[r.originalCurrency]) byCurrencyMap[r.originalCurrency] = { currency: r.originalCurrency, count: 0, total: 0 };
     byCurrencyMap[r.originalCurrency].count++;
     byCurrencyMap[r.originalCurrency].total += r.originalAmount;
 
-    // Month
     const month = r.tripDate.substring(0, 7);
     if (!byMonthMap[month]) byMonthMap[month] = { month, count: 0, total: 0 };
     byMonthMap[month].count++;

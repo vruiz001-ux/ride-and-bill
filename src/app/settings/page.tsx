@@ -4,6 +4,8 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PlanBadge } from "@/components/plan-badge";
+import { UsageBar } from "@/components/usage-bar";
 import { SUPPORTED_CURRENCIES } from "@/lib/services/fx";
 import { formatDate } from "@/lib/utils";
 import type { ConnectedEmailAccount } from "@/lib/types";
@@ -16,12 +18,32 @@ const TIMEZONES = [
   "Pacific/Auckland", "Australia/Sydney",
 ];
 
+interface PlanInfo {
+  id: string;
+  name: string;
+  status: string;
+  features: Record<string, boolean>;
+}
+
+interface UsageInfo {
+  periodStart: string;
+  periodEnd: string;
+  receiptsUsed: number;
+  seatCount: number;
+  inboxCount: number;
+  receiptsLimit: number;
+  seatsLimit: number;
+  inboxesLimit: number;
+}
+
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [emailAccounts, setEmailAccounts] = useState<ConnectedEmailAccount[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [plan, setPlan] = useState<PlanInfo | null>(null);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
 
   // Profile fields
   const [name, setName] = useState("");
@@ -33,7 +55,6 @@ export default function SettingsPage() {
   const [markupPercent, setMarkupPercent] = useState(5);
 
   useEffect(() => {
-    // Fetch settings
     fetch("/api/settings").then(r => r.json()).then(data => {
       if (data) {
         setName(data.name || "");
@@ -43,11 +64,13 @@ export default function SettingsPage() {
         setTimezone(data.timezone || "UTC");
         setDefaultCurrency(data.defaultCurrency || "EUR");
         setMarkupPercent(data.defaultMarkupPercent ?? 5);
+        if (data.plan) setPlan(data.plan);
       }
     });
-    // Fetch connected accounts
     fetch("/api/dashboard").then(r => r.json()).then(data => {
       setEmailAccounts(data.emailAccounts || []);
+      if (data.usage) setUsage(data.usage);
+      if (data.plan) setPlan(data.plan);
     });
   }, []);
 
@@ -65,7 +88,10 @@ export default function SettingsPage() {
         body: JSON.stringify({ name, companyName: companyName || null, companyAddress: companyAddress || null, vatId: vatId || null, timezone }),
       });
       if (res.ok) showMessage("success", "Profile saved");
-      else showMessage("error", "Failed to save profile");
+      else {
+        const data = await res.json();
+        showMessage("error", data.error || "Failed to save profile");
+      }
     } finally {
       setSaving(null);
     }
@@ -80,7 +106,10 @@ export default function SettingsPage() {
         body: JSON.stringify({ defaultCurrency, defaultMarkupPercent: markupPercent }),
       });
       if (res.ok) showMessage("success", "Preferences saved");
-      else showMessage("error", "Failed to save preferences");
+      else {
+        const data = await res.json();
+        showMessage("error", data.error || "Failed to save preferences");
+      }
     } finally {
       setSaving(null);
     }
@@ -89,10 +118,16 @@ export default function SettingsPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await fetch("/api/sync", { method: "POST" });
-      const data = await fetch("/api/dashboard").then(r => r.json());
-      setEmailAccounts(data.emailAccounts || []);
-      showMessage("success", "Sync complete");
+      const res = await fetch("/api/sync", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json();
+        showMessage("error", data.error || "Sync failed");
+      } else {
+        const dashData = await fetch("/api/dashboard").then(r => r.json());
+        setEmailAccounts(dashData.emailAccounts || []);
+        if (dashData.usage) setUsage(dashData.usage);
+        showMessage("success", "Sync complete");
+      }
     } catch {
       showMessage("error", "Sync failed");
     } finally {
@@ -102,7 +137,7 @@ export default function SettingsPage() {
 
   const handleDeleteAccount = async () => {
     if (!confirm("Are you sure? This will permanently delete your account and all data.")) return;
-    if (!confirm("This cannot be undone. Type 'delete' in the next prompt to confirm.")) return;
+    if (!confirm("This cannot be undone. Are you absolutely sure?")) return;
 
     const res = await fetch("/api/settings", { method: "DELETE" });
     if (res.ok) {
@@ -111,6 +146,10 @@ export default function SettingsPage() {
       showMessage("error", "Failed to delete account");
     }
   };
+
+  const canConnectOutlook = plan?.features?.outlookSync ?? false;
+  const canConnectGmail = plan?.features?.gmailSync ?? false;
+  const companyDetailsAllowed = plan?.features?.companyDetailsInReports ?? false;
 
   return (
     <div className="space-y-8">
@@ -124,6 +163,37 @@ export default function SettingsPage() {
           {message.text}
         </div>
       )}
+
+      {/* Plan & Usage Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Plan & Usage</CardTitle>
+            {plan && <PlanBadge plan={plan.id} size="md" />}
+          </div>
+          <CardDescription>
+            {plan ? `You are on the ${plan.name} plan.` : "Loading plan info..."}
+            {plan?.status && plan.status !== "active" && (
+              <span className="ml-2 text-amber-600">Status: {plan.status}</span>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {usage && (
+            <div className="grid gap-4 sm:grid-cols-3">
+              <UsageBar label="Receipts this period" current={usage.receiptsUsed} limit={usage.receiptsLimit} />
+              <UsageBar label="Seats" current={usage.seatCount} limit={usage.seatsLimit} />
+              <UsageBar label="Connected inboxes" current={usage.inboxCount} limit={usage.inboxesLimit} />
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Button variant="outline" size="sm">View Plans</Button>
+            {plan?.id === "free" && (
+              <Button size="sm">Upgrade</Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -141,16 +211,25 @@ export default function SettingsPage() {
               <input type="email" defaultValue={session?.user?.email || ""} disabled className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Company Name</label>
-              <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Acme Corp" className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+              <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                Company Name
+                {!companyDetailsAllowed && <span className="ml-1 text-xs text-neutral-400">(paid plans)</span>}
+              </label>
+              <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Acme Corp" disabled={!companyDetailsAllowed} className={`h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 ${!companyDetailsAllowed ? "opacity-60" : ""}`} />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">VAT / Tax ID</label>
-              <input type="text" value={vatId} onChange={e => setVatId(e.target.value)} placeholder="PL1234567890" className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+              <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                VAT / Tax ID
+                {!companyDetailsAllowed && <span className="ml-1 text-xs text-neutral-400">(paid plans)</span>}
+              </label>
+              <input type="text" value={vatId} onChange={e => setVatId(e.target.value)} placeholder="PL1234567890" disabled={!companyDetailsAllowed} className={`h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 ${!companyDetailsAllowed ? "opacity-60" : ""}`} />
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Company Address</label>
-              <input type="text" value={companyAddress} onChange={e => setCompanyAddress(e.target.value)} placeholder="123 Business St, Warsaw, Poland" className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+              <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                Company Address
+                {!companyDetailsAllowed && <span className="ml-1 text-xs text-neutral-400">(paid plans)</span>}
+              </label>
+              <input type="text" value={companyAddress} onChange={e => setCompanyAddress(e.target.value)} placeholder="123 Business St, Warsaw, Poland" disabled={!companyDetailsAllowed} className={`h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800 ${!companyDetailsAllowed ? "opacity-60" : ""}`} />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Timezone</label>
@@ -175,7 +254,7 @@ export default function SettingsPage() {
             <div>
               <label className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Default Currency</label>
               <select value={defaultCurrency} onChange={e => setDefaultCurrency(e.target.value)} className="h-11 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm dark:border-neutral-700 dark:bg-neutral-800">
-                {SUPPORTED_CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.symbol} {c.code} — {c.name}</option>)}
+                {SUPPORTED_CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.symbol} {c.code} &mdash; {c.name}</option>)}
               </select>
             </div>
             <div>
@@ -199,13 +278,13 @@ export default function SettingsPage() {
             <div key={acc.id} className="flex items-center justify-between rounded-xl border border-neutral-200/60 p-4 dark:border-neutral-800">
               <div className="flex items-center gap-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg dark:bg-blue-900/20">
-                  {acc.provider === "gmail" ? "📧" : acc.provider === "outlook" ? "📨" : "📬"}
+                  {acc.provider === "gmail" ? "\uD83D\uDCE7" : acc.provider === "outlook" ? "\uD83D\uDCE8" : "\uD83D\uDCEC"}
                 </div>
                 <div>
                   <div className="text-sm font-medium text-neutral-900 dark:text-white">{acc.email}</div>
                   <div className="text-xs text-neutral-400">
-                    {acc.provider.charAt(0).toUpperCase() + acc.provider.slice(1)} · {acc.totalImported} imported
-                    {acc.lastSyncAt ? ` · Last sync ${formatDate(acc.lastSyncAt)}` : ""}
+                    {acc.provider.charAt(0).toUpperCase() + acc.provider.slice(1)} &middot; {acc.totalImported} imported
+                    {acc.lastSyncAt ? ` \u00B7 Last sync ${formatDate(acc.lastSyncAt)}` : ""}
                   </div>
                 </div>
               </div>
@@ -218,14 +297,30 @@ export default function SettingsPage() {
             </div>
           ))}
           {emailAccounts.length === 0 && (
-            <div className="py-6 text-center text-neutral-400 text-sm">No email accounts connected.</div>
+            <div className="py-6 text-center text-neutral-400 text-sm">
+              {plan?.id === "free"
+                ? "Email sync is not available on the Free plan. Upgrade to connect an inbox."
+                : "No email accounts connected."}
+            </div>
           )}
           <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={() => signIn("google", { callbackUrl: "/settings" })}>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => signIn("google", { callbackUrl: "/settings" })}
+              disabled={!canConnectGmail}
+            >
               Connect Gmail
+              {!canConnectGmail && <span className="ml-1 text-xs opacity-60">(upgrade)</span>}
             </Button>
-            <Button variant="outline" className="flex-1" onClick={() => signIn("azure-ad", { callbackUrl: "/settings" })}>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => signIn("azure-ad", { callbackUrl: "/settings" })}
+              disabled={!canConnectOutlook}
+            >
               Connect Outlook
+              {!canConnectOutlook && <span className="ml-1 text-xs opacity-60">(Pro+)</span>}
             </Button>
           </div>
         </CardContent>

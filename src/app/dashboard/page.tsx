@@ -3,6 +3,9 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PlanBadge } from "@/components/plan-badge";
+import { UsageBar } from "@/components/usage-bar";
+import { LimitWarning } from "@/components/upgrade-prompt";
 import { formatCurrency, formatDate, providerLabel } from "@/lib/utils";
 import Link from "next/link";
 import type { DashboardStats, ConnectedEmailAccount } from "@/lib/types";
@@ -11,9 +14,34 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
+interface PlanInfo {
+  id: string;
+  name: string;
+  status: string;
+  isActive: boolean;
+  isGracePeriod: boolean;
+  isReadOnly: boolean;
+  isOverSeatLimit: boolean;
+  isOverInboxLimit: boolean;
+  features: Record<string, boolean>;
+}
+
+interface UsageInfo {
+  periodStart: string;
+  periodEnd: string;
+  receiptsUsed: number;
+  seatCount: number;
+  inboxCount: number;
+  receiptsLimit: number;
+  seatsLimit: number;
+  inboxesLimit: number;
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [accounts, setAccounts] = useState<ConnectedEmailAccount[]>([]);
+  const [plan, setPlan] = useState<PlanInfo | null>(null);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,6 +55,8 @@ export default function DashboardPage() {
         const data = await res.json();
         setStats(data.stats);
         setAccounts(data.emailAccounts);
+        setPlan(data.plan || null);
+        setUsage(data.usage || null);
       }
     } finally {
       setLoading(false);
@@ -48,7 +78,11 @@ export default function DashboardPage() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      setSyncResult(data.message || data.error || "Sync complete");
+      if (!res.ok && data.code) {
+        setSyncResult(data.error || "Sync blocked by plan limits");
+      } else {
+        setSyncResult(data.message || data.error || "Sync complete");
+      }
       await fetchData();
     } catch {
       setSyncResult("Sync failed — please try again");
@@ -66,6 +100,7 @@ export default function DashboardPage() {
   }
 
   const account = accounts[0];
+  const canSync = plan?.features?.gmailSync || plan?.features?.outlookSync;
 
   return (
     <div className="space-y-8">
@@ -75,51 +110,103 @@ export default function DashboardPage() {
           <p className="mt-1 text-sm text-neutral-500">Your ride receipt intelligence at a glance.</p>
         </div>
         <div className="flex items-center gap-3">
+          {plan && <PlanBadge plan={plan.id} size="md" />}
           <Link href="/exports">
             <Button size="sm" variant="outline">Export</Button>
           </Link>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Sync period:</span>
-            <select
-              value={syncMonth}
-              onChange={(e) => setSyncMonth(e.target.value)}
-              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-800"
-            >
-              <option value="">All months</option>
-              {MONTHS.map((m, i) => (
-                <option key={m} value={String(i + 1)}>{m}</option>
-              ))}
-            </select>
-            <select
-              value={syncYear}
-              onChange={(e) => setSyncYear(e.target.value)}
-              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-800"
-            >
-              <option value="">All years</option>
-              {YEARS.map((y) => (
-                <option key={y} value={String(y)}>{y}</option>
-              ))}
-            </select>
-            <Button size="sm" onClick={handleSync} disabled={syncing}>
-              {syncing ? "Syncing..." : "Sync Emails"}
-            </Button>
-            {syncResult && (
-              <span className="text-xs text-neutral-500">{syncResult}</span>
-            )}
+      {/* Billing warnings */}
+      {plan?.isReadOnly && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800/50 dark:bg-red-900/20">
+          <div className="text-sm font-medium text-red-700 dark:text-red-400">
+            Your subscription is inactive. Data is read-only. Please update your billing to resume.
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
+      {plan?.isGracePeriod && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800/50 dark:bg-amber-900/20">
+          <div className="text-sm font-medium text-amber-700 dark:text-amber-400">
+            Your payment is past due. Please update your billing to avoid service interruption.
+          </div>
+        </div>
+      )}
+
+      {/* Usage overview */}
+      {usage && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Current Period Usage</span>
+              <span className="text-xs text-neutral-400">
+                {new Date(usage.periodStart).toLocaleDateString()} — {new Date(usage.periodEnd).toLocaleDateString()}
+              </span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <UsageBar label="Receipts" current={usage.receiptsUsed} limit={usage.receiptsLimit} />
+              <UsageBar label="Seats" current={usage.seatCount} limit={usage.seatsLimit} />
+              <UsageBar label="Inboxes" current={usage.inboxCount} limit={usage.inboxesLimit} />
+            </div>
+            <LimitWarning current={usage.receiptsUsed} limit={usage.receiptsLimit} label="Receipts" />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Sync controls */}
+      {canSync ? (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Sync period:</span>
+              <select
+                value={syncMonth}
+                onChange={(e) => setSyncMonth(e.target.value)}
+                className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-800"
+              >
+                <option value="">All months</option>
+                {MONTHS.map((m, i) => (
+                  <option key={m} value={String(i + 1)}>{m}</option>
+                ))}
+              </select>
+              <select
+                value={syncYear}
+                onChange={(e) => setSyncYear(e.target.value)}
+                className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-800"
+              >
+                <option value="">All years</option>
+                {YEARS.map((y) => (
+                  <option key={y} value={String(y)}>{y}</option>
+                ))}
+              </select>
+              <Button size="sm" onClick={handleSync} disabled={syncing || plan?.isReadOnly}>
+                {syncing ? "Syncing..." : "Sync Emails"}
+              </Button>
+              {syncResult && (
+                <span className="text-xs text-neutral-500">{syncResult}</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Email Sync</div>
+                <div className="text-xs text-neutral-400">Upgrade to Solo or higher to connect an inbox and auto-sync receipts.</div>
+              </div>
+              <Button size="sm" variant="outline">Upgrade</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {account && (
         <Card>
           <CardContent className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg dark:bg-blue-900/20">📧</div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg dark:bg-blue-900/20">&#x1F4E7;</div>
               <div>
                 <div className="text-sm font-medium text-neutral-900 dark:text-white">{account.email}</div>
                 <div className="text-xs text-neutral-400">
@@ -249,7 +336,7 @@ export default function DashboardPage() {
                   <div className="text-right">
                     <div className="text-sm font-semibold text-neutral-900 dark:text-white">{formatCurrency(r.amountTotal, r.currency)}</div>
                     {r.convertedCurrency && r.convertedCurrency !== r.currency && (
-                      <div className="text-xs text-neutral-400">≈ {formatCurrency(r.convertedAmount!, r.convertedCurrency)}</div>
+                      <div className="text-xs text-neutral-400">&asymp; {formatCurrency(r.convertedAmount!, r.convertedCurrency)}</div>
                     )}
                   </div>
                 </div>

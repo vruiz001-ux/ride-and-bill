@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getBillingEntities, getInvoiceBatches } from '@/lib/services/db';
 import { z } from 'zod';
+import { getUserEntitlements } from '@/lib/services/entitlements';
 
 const createEntitySchema = z.object({
   legalName: z.string().min(1).max(200),
@@ -33,6 +34,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const entitlements = await getUserEntitlements(session.user.id);
+
+  if (entitlements.isReadOnly) {
+    return NextResponse.json({
+      error: 'Your subscription is inactive. Please update your billing.',
+      code: 'SUBSCRIPTION_INACTIVE',
+    }, { status: 403 });
+  }
+
   let body;
   try {
     body = await request.json();
@@ -50,6 +60,7 @@ export async function POST(request: Request) {
   const entity = await prisma.billingEntity.create({
     data: {
       userId: session.user.id,
+      workspaceId: entitlements.workspaceId,
       legalName,
       billingAddress,
       vatOrTaxId: vatOrTaxId || null,
