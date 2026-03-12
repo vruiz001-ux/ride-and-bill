@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Logo } from "@/components/logo";
 
 const features = [
   { title: "Auto-Detect Receipts", desc: "Connect Gmail or Outlook. We find every Uber, Bolt, Waymo, Careem & FREE NOW receipt automatically.", icon: "📧" },
@@ -23,10 +24,7 @@ export default function LandingPage() {
       {/* Nav */}
       <nav className="fixed top-0 z-50 w-full border-b border-neutral-200/60 bg-white/80 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/80">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 text-sm font-bold text-white dark:bg-white dark:text-neutral-900">R</div>
-            <span className="text-lg font-semibold tracking-tight">RideReceipt</span>
-          </div>
+          <Logo height={56} />
           <div className="flex items-center gap-3">
             <Link href="/login">
               <Button variant="ghost" size="sm">Sign in</Button>
@@ -115,7 +113,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-neutral-200/60 py-8 dark:border-neutral-800">
         <div className="mx-auto max-w-6xl px-6 text-center text-sm text-neutral-400">
-          &copy; 2026 RideReceipt. Built for professionals who move.
+          &copy; 2026 Ride &amp; Bill. Built for professionals who move.
         </div>
       </footer>
     </div>

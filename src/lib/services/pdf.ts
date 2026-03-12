@@ -62,7 +62,7 @@ export async function generatePdfExport(options: PdfOptions): Promise<Buffer> {
   // ─── Cover / Header ──────────────────────────────────
   doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
-  doc.text('RideReceipt Report', 20, 30);
+  doc.text('Ride & Bill Report', 20, 30);
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -267,7 +267,7 @@ export async function generatePdfExport(options: PdfOptions): Promise<Buffer> {
     doc.setFontSize(8);
     doc.setTextColor(150);
     doc.text(
-      `RideReceipt \u2014 Page ${i} of ${pageCount}`,
+      `Ride & Bill \u2014 Page ${i} of ${pageCount}`,
       pageWidth / 2,
       doc.internal.pageSize.getHeight() - 10,
       { align: 'center' }

@@ -5,6 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { PlanBadge } from "@/components/plan-badge";
+import { Logo } from "@/components/logo";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "\uD83D\uDCCA" },
@@ -42,11 +43,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-neutral-200/60 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <div className="flex h-16 items-center gap-2 border-b border-neutral-200/60 px-6 dark:border-neutral-800">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 text-sm font-bold text-white dark:bg-white dark:text-neutral-900">
-            R
-          </div>
-          <span className="text-lg font-semibold tracking-tight">RideReceipt</span>
+        <div className="flex h-24 items-center justify-center border-b border-neutral-200/60 px-4 dark:border-neutral-800">
+          <Logo height={72} />
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4">

@@ -101,7 +101,7 @@ export default function ExportsPage() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `ridereceipt-${new Date().toISOString().split("T")[0]}.pdf`;
+        a.download = `ride-and-bill-${new Date().toISOString().split("T")[0]}.pdf`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -111,7 +111,7 @@ export default function ExportsPage() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `ridereceipt-${new Date().toISOString().split("T")[0]}.csv`;
+        a.download = `ride-and-bill-${new Date().toISOString().split("T")[0]}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

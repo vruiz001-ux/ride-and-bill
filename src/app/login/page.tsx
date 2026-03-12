@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Logo } from "@/components/logo";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -53,10 +54,10 @@ function LoginContent() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-900 text-lg font-bold text-white dark:bg-white dark:text-neutral-900">R</div>
+            <Logo height={80} />
           </Link>
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">Welcome back</h1>
-          <p className="mt-1 text-sm text-neutral-500">Sign in to manage your ride receipts</p>
+          <p className="mt-1 text-sm text-neutral-500">Sign in to Ride &amp; Bill</p>
         </div>
 
         {verified && (

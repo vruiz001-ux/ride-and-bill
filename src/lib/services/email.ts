@@ -15,7 +15,7 @@ function getAppUrl() {
 }
 
 function getFromEmail() {
-  return process.env.EMAIL_FROM || 'RideReceipt <onboarding@resend.dev>';
+  return process.env.EMAIL_FROM || 'Ride & Bill <onboarding@resend.dev>';
 }
 
 export async function sendVerificationEmail(userId: string, email: string) {
@@ -31,10 +31,10 @@ export async function sendVerificationEmail(userId: string, email: string) {
   await getResend().emails.send({
     from: getFromEmail(),
     to: email,
-    subject: 'Verify your RideReceipt account',
+    subject: 'Verify your Ride & Bill account',
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-        <h2>Welcome to RideReceipt</h2>
+        <h2>Welcome to Ride & Bill</h2>
         <p>Click the button below to verify your email address:</p>
         <a href="${verifyUrl}" style="display: inline-block; background: #171717; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin: 16px 0;">
           Verify Email
@@ -59,7 +59,7 @@ export async function sendPasswordResetEmail(userId: string, email: string) {
   await getResend().emails.send({
     from: getFromEmail(),
     to: email,
-    subject: 'Reset your RideReceipt password',
+    subject: 'Reset your Ride & Bill password',
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
         <h2>Password Reset</h2>

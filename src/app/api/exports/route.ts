@@ -98,7 +98,7 @@ export async function POST(request: Request) {
       return new Response(new Uint8Array(pdfBuffer), {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="ridereceipt-${dateStr}.pdf"`,
+          'Content-Disposition': `attachment; filename="ride-and-bill-${dateStr}.pdf"`,
         },
       });
     }
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
       return new Response(csvContent, {
         headers: {
           'Content-Type': 'text/csv',
-          'Content-Disposition': `attachment; filename="ridereceipt-${dateStr}.csv"`,
+          'Content-Disposition': `attachment; filename="ride-and-bill-${dateStr}.csv"`,
         },
       });
     }

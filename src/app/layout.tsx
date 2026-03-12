@@ -3,7 +3,7 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RideReceipt — Ride Receipt Intelligence",
+  title: "Ride & Bill — Admin'Easy",
   description: "Automatic Uber & Bolt receipt collection, multi-currency conversion, and professional invoicing.",
 };
 
