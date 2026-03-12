@@ -20,6 +20,7 @@ const jsonLd = {
     "@type": "Offer",
     price: "0",
     priceCurrency: "EUR",
+
     description: "Free for up to 50 receipts per month",
   },
   publisher: {
@@ -216,7 +217,7 @@ export default function LandingPage() {
             <div className="flex flex-col rounded-2xl border border-neutral-200/60 bg-white p-8 dark:border-neutral-800 dark:bg-neutral-900">
               <div className="text-sm font-medium text-neutral-500">Free</div>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-neutral-900 dark:text-white">$0</span>
+                <span className="text-4xl font-bold text-neutral-900 dark:text-white">&euro;0</span>
                 <span className="text-sm text-neutral-400">/mo</span>
               </div>
               <p className="mt-3 text-sm text-neutral-500">For trying things out</p>
@@ -235,7 +236,7 @@ export default function LandingPage() {
             <div className="flex flex-col rounded-2xl border border-neutral-200/60 bg-white p-8 dark:border-neutral-800 dark:bg-neutral-900">
               <div className="text-sm font-medium text-neutral-500">Solo</div>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-neutral-900 dark:text-white">$9</span>
+                <span className="text-4xl font-bold text-neutral-900 dark:text-white">&euro;9</span>
                 <span className="text-sm text-neutral-400">/mo</span>
               </div>
               <p className="mt-3 text-sm text-neutral-500">For individuals</p>
@@ -258,7 +259,7 @@ export default function LandingPage() {
               </div>
               <div className="text-sm font-medium text-[#1e3a5f]">Pro</div>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-neutral-900 dark:text-white">$29</span>
+                <span className="text-4xl font-bold text-neutral-900 dark:text-white">&euro;29</span>
                 <span className="text-sm text-neutral-400">/mo</span>
               </div>
               <p className="mt-3 text-sm text-neutral-500">For power users &amp; small teams</p>
@@ -280,7 +281,7 @@ export default function LandingPage() {
             <div className="flex flex-col rounded-2xl border border-neutral-200/60 bg-white p-8 dark:border-neutral-800 dark:bg-neutral-900">
               <div className="text-sm font-medium text-neutral-500">Team</div>
               <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-neutral-900 dark:text-white">$79</span>
+                <span className="text-4xl font-bold text-neutral-900 dark:text-white">&euro;79</span>
                 <span className="text-sm text-neutral-400">/mo</span>
               </div>
               <p className="mt-3 text-sm text-neutral-500">For organizations</p>
