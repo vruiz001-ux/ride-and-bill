@@ -66,7 +66,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <Logo height={80} />
+            <Logo height={100} />
           </Link>
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-neutral-900 dark:text-white">Create your account</h1>
           <p className="mt-1 text-sm text-neutral-500">Start using Ride &amp; Bill</p>

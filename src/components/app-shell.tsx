@@ -43,8 +43,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-neutral-200/60 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-        <div className="flex h-24 items-center justify-center border-b border-neutral-200/60 px-4 dark:border-neutral-800">
-          <Logo height={72} />
+        <div className="border-b border-neutral-200/60 dark:border-neutral-800 leading-[0] p-3">
+          <img src="/logo-rb.png" alt="Ride & Bill" className="w-full h-auto align-bottom" />
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4">

@@ -8,7 +8,7 @@ interface LogoProps {
 export function Logo({ height = 40, className }: LogoProps) {
   return (
     <Image
-      src="/logo.jpg"
+      src="/logo-rb.png"
       alt="Ride & Bill"
       width={Math.round(height * 2.4)}
       height={height}

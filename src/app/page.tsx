@@ -23,8 +23,8 @@ export default function LandingPage() {
     <div className="min-h-screen">
       {/* Nav */}
       <nav className="fixed top-0 z-50 w-full border-b border-neutral-200/60 bg-white/80 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/80">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Logo height={56} />
+        <div className="mx-auto flex h-24 max-w-6xl items-center justify-between px-6">
+          <Logo height={80} />
           <div className="flex items-center gap-3">
             <Link href="/login">
               <Button variant="ghost" size="sm">Sign in</Button>
@@ -37,7 +37,7 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="pt-32 pb-20">
+      <section className="pt-40 pb-20">
         <div className="mx-auto max-w-6xl px-6 text-center">
           <div className="mx-auto max-w-3xl">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-1.5 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
