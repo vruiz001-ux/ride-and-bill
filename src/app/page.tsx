@@ -139,9 +139,9 @@ export default function LandingPage() {
               <Link href="/register">
                 <Button size="lg">Get Started Free</Button>
               </Link>
-              <Link href="#features">
+              <a href="#features" onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}>
                 <Button variant="outline" size="lg">See Features</Button>
-              </Link>
+              </a>
             </div>
           </div>
 
