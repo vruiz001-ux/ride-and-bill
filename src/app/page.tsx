@@ -3,6 +3,36 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Logo } from "@/components/logo";
+import Script from "next/script";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Ride & Bill",
+  alternateName: "Ride & Bill — Admin'Easy",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  description:
+    "Automatically collect Uber, Bolt, Waymo, Careem & FREE NOW receipts. Multi-currency conversion, PDF exports, and re-invoicing.",
+  url: "https://ride-and-bill.netlify.app",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "EUR",
+    description: "Free for up to 50 receipts per month",
+  },
+  publisher: {
+    "@type": "Organization",
+    name: "Tropos Group",
+  },
+  featureList: [
+    "Automatic receipt detection from Gmail and Outlook",
+    "Multi-currency conversion with configurable FX markup",
+    "Professional PDF and CSV exports",
+    "Third-party re-invoicing with billing entities",
+    "Support for Uber, Bolt, Waymo, Careem, FREE NOW",
+  ],
+};
 
 const features = [
   { title: "Auto-Detect Receipts", desc: "Connect Gmail or Outlook. We find every Uber, Bolt, Waymo, Careem & FREE NOW receipt automatically.", icon: "📧" },
@@ -21,21 +51,29 @@ const stats = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen">
+      <Script
+        id="json-ld"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Nav */}
-      <nav className="fixed top-0 z-50 w-full border-b border-neutral-200/60 bg-white/80 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/80">
+      <header>
+      <nav aria-label="Main navigation" className="fixed top-0 z-50 w-full border-b border-neutral-200/60 bg-white/80 backdrop-blur-xl dark:border-neutral-800 dark:bg-neutral-950/80">
         <div className="mx-auto flex h-24 max-w-6xl items-center justify-between px-6">
           <Logo height={80} />
           <div className="flex items-center gap-3">
-            <Link href="/login">
-              <Button variant="ghost" size="sm">Sign in</Button>
+            <Link href="/register">
+              <Button variant="outline" size="sm">Sign Up</Button>
             </Link>
-            <Link href="/dashboard">
-              <Button size="sm">Open App</Button>
+            <Link href="/login">
+              <Button size="sm">Log In</Button>
             </Link>
           </div>
         </div>
       </nav>
+      </header>
 
+      <main>
       {/* Hero */}
       <section className="pt-40 pb-20">
         <div className="mx-auto max-w-6xl px-6 text-center">
@@ -104,16 +142,19 @@ export default function LandingPage() {
             Start managing your ride receipts today
           </h2>
           <p className="mt-4 text-neutral-500">No credit card required. Free for up to 50 receipts per month.</p>
-          <Link href="/dashboard" className="mt-8 inline-block">
-            <Button size="lg">Open Dashboard</Button>
+          <Link href="/register" className="mt-8 inline-block">
+            <Button size="lg">Get Started Free</Button>
           </Link>
         </div>
       </section>
+      </main>
 
       {/* Footer */}
       <footer className="border-t border-neutral-200/60 py-8 dark:border-neutral-800">
         <div className="mx-auto max-w-6xl px-6 text-center text-sm text-neutral-400">
           &copy; 2026 Ride &amp; Bill. Built for professionals who move.
+          <br />
+          <span className="text-neutral-300">Part of the Tropos group of companies</span>
         </div>
       </footer>
     </div>

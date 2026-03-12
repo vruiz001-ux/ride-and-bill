@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /receipts
+Disallow: /exports
+Disallow: /settings
+Disallow: /billing
+Disallow: /reset-password
+
+Sitemap: https://ride-and-bill.netlify.app/sitemap.xml
