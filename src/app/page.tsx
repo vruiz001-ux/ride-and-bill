@@ -75,15 +75,15 @@ function NavDropdown() {
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-44 rounded-xl border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
-          <Link href="#about" onClick={() => setOpen(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800">
+          <a href="#about" onClick={() => { setOpen(false); document.getElementById("about")?.scrollIntoView({ behavior: "smooth" }); }} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800 cursor-pointer">
             About Us
-          </Link>
-          <Link href="#pricing" onClick={() => setOpen(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800">
+          </a>
+          <a href="#pricing" onClick={() => { setOpen(false); document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" }); }} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800 cursor-pointer">
             Pricing
-          </Link>
-          <Link href="#faq" onClick={() => setOpen(false)} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800">
+          </a>
+          <a href="#faq" onClick={() => { setOpen(false); document.getElementById("faq")?.scrollIntoView({ behavior: "smooth" }); }} className="block px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800 cursor-pointer">
             FAQ
-          </Link>
+          </a>
         </div>
       )}
     </div>
@@ -158,7 +158,7 @@ export default function LandingPage() {
       </section>
 
       {/* Features */}
-      <section id="features" className="border-t border-neutral-200/60 bg-white py-20 dark:border-neutral-800 dark:bg-neutral-900">
+      <section id="features" className="scroll-mt-28 border-t border-neutral-200/60 bg-white py-20 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mx-auto max-w-6xl px-6">
           <h2 className="text-center text-3xl font-bold tracking-tight text-neutral-900 dark:text-white">
             Everything you need for ride expense management
@@ -181,7 +181,7 @@ export default function LandingPage() {
       </section>
 
       {/* About Us */}
-      <section id="about" className="py-20">
+      <section id="about" className="scroll-mt-28 py-20">
         <div className="mx-auto max-w-3xl px-6">
           <h2 className="text-center text-3xl font-bold tracking-tight text-neutral-900 dark:text-white">
             About Us
@@ -204,7 +204,7 @@ export default function LandingPage() {
       </section>
 
       {/* Pricing */}
-      <section id="pricing" className="py-20">
+      <section id="pricing" className="scroll-mt-28 py-20">
         <div className="mx-auto max-w-6xl px-6">
           <h2 className="text-center text-3xl font-bold tracking-tight text-neutral-900 dark:text-white">
             Simple, transparent pricing
