@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Providers } from "@/components/providers";
+import { AnalyticsScripts } from "@/components/analytics";
 import "./globals.css";
 
 const siteUrl = "https://ride-and-bill.netlify.app";
@@ -78,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen bg-neutral-50 antialiased dark:bg-neutral-950">
         <Providers>{children}</Providers>
+        <AnalyticsScripts />
       </body>
     </html>
   );

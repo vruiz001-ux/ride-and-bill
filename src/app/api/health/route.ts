@@ -1,28 +1,29 @@
 import { NextResponse } from 'next/server';
+import { rateLimit } from '@/lib/rate-limit';
 
-export async function GET() {
-  const info: Record<string, unknown> = {
-    node: process.version,
-    tursoUrl: process.env.TURSO_DATABASE_URL ? 'set' : 'missing',
-    tursoToken: process.env.TURSO_AUTH_TOKEN ? 'set' : 'missing',
-    nextauthUrl: process.env.NEXTAUTH_URL || 'missing',
-    nextauthSecret: process.env.NEXTAUTH_SECRET ? 'set' : 'missing',
-    googleClientId: process.env.GOOGLE_CLIENT_ID ? 'set' : 'missing',
+const startedAt = Date.now();
+
+export async function GET(request: Request) {
+  const ip = request.headers.get('x-forwarded-for') || 'unknown';
+  if (!rateLimit(`health:${ip}`, 10, 60_000)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
+  const health: Record<string, unknown> = {
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    uptime: Math.floor((Date.now() - startedAt) / 1000),
   };
 
   try {
     const { prisma } = await import('@/lib/prisma');
-    const count = await prisma.user.count();
-    info.db = `connected (${count} users)`;
-
-    // Get recent debug logs
-    const logs = await prisma.$queryRawUnsafe(
-      `SELECT ts, msg FROM _debug_log ORDER BY id DESC LIMIT 20`
-    );
-    info.debugLogs = logs;
-  } catch (e: unknown) {
-    info.db = `error: ${e instanceof Error ? e.message : String(e)}`;
+    await prisma.$queryRawUnsafe('SELECT 1');
+    health.database = 'connected';
+  } catch {
+    health.database = 'unavailable';
+    health.status = 'degraded';
   }
 
-  return NextResponse.json(info);
+  const statusCode = health.status === 'operational' ? 200 : 503;
+  return NextResponse.json(health, { status: statusCode });
 }

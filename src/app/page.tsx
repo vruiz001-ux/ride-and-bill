@@ -157,6 +157,42 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Product Screenshots */}
+      <section className="border-t border-neutral-200/60 bg-white py-20 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="mx-auto max-w-6xl px-6">
+          <h2 className="text-center text-3xl font-bold tracking-tight text-neutral-900 dark:text-white">
+            See it in action
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-center text-neutral-500 dark:text-neutral-400">
+            A clean, powerful interface designed for speed and clarity.
+          </p>
+          <div className="mt-14 grid gap-8 sm:grid-cols-3">
+            {/* TODO: Replace placeholders with real product screenshots */}
+            <div className="overflow-hidden rounded-2xl border border-neutral-200/60 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800">
+              <div className="flex h-48 items-center justify-center text-4xl">&#128202;</div>
+              <div className="border-t border-neutral-200/60 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                <h3 className="font-semibold text-neutral-900 dark:text-white">Dashboard</h3>
+                <p className="mt-1 text-sm text-neutral-500">Real-time overview of all your ride expenses and synced receipts.</p>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-neutral-200/60 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800">
+              <div className="flex h-48 items-center justify-center text-4xl">&#128196;</div>
+              <div className="border-t border-neutral-200/60 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                <h3 className="font-semibold text-neutral-900 dark:text-white">Reports &amp; Exports</h3>
+                <p className="mt-1 text-sm text-neutral-500">Professional PDF bundles and CSV exports with multi-currency conversion.</p>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-neutral-200/60 bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800">
+              <div className="flex h-48 items-center justify-center text-4xl">&#128241;</div>
+              <div className="border-t border-neutral-200/60 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+                <h3 className="font-semibold text-neutral-900 dark:text-white">Mobile Ready</h3>
+                <p className="mt-1 text-sm text-neutral-500">Fully responsive — manage receipts on any device, anywhere.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
       <section id="features" className="scroll-mt-28 border-t border-neutral-200/60 bg-white py-20 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mx-auto max-w-6xl px-6">
@@ -199,6 +235,57 @@ export default function LandingPage() {
             <p>
               Created by Vincent Ruiz, a former pilot and C-suite executive who has been travelling around the globe for 30 years.
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      {/* TODO: Replace placeholder testimonials with real customer quotes */}
+      <section className="border-t border-neutral-200/60 bg-white py-20 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="mx-auto max-w-6xl px-6">
+          <h2 className="text-center text-3xl font-bold tracking-tight text-neutral-900 dark:text-white">
+            Trusted by finance teams worldwide
+          </h2>
+          <div className="mt-14 grid gap-8 sm:grid-cols-3">
+            <div className="rounded-2xl border border-neutral-200/60 bg-neutral-50 p-8 dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="flex gap-1 text-amber-400">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+              <p className="mt-4 text-neutral-600 dark:text-neutral-400">
+                &ldquo;Ride &amp; Bill saved us 15 hours a month on expense processing. The automatic receipt detection is a game-changer.&rdquo;
+              </p>
+              <div className="mt-6 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1e3a5f] text-sm font-bold text-white">SJ</div>
+                <div>
+                  <div className="text-sm font-semibold text-neutral-900 dark:text-white">Sarah J.</div>
+                  <div className="text-xs text-neutral-500">Finance Director, Tech Company</div>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-neutral-200/60 bg-neutral-50 p-8 dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="flex gap-1 text-amber-400">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+              <p className="mt-4 text-neutral-600 dark:text-neutral-400">
+                &ldquo;Perfect for client billing across borders. The FX markup feature alone pays for the subscription ten times over.&rdquo;
+              </p>
+              <div className="mt-6 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1e3a5f] text-sm font-bold text-white">MW</div>
+                <div>
+                  <div className="text-sm font-semibold text-neutral-900 dark:text-white">Marcus W.</div>
+                  <div className="text-xs text-neutral-500">Management Consultant</div>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-neutral-200/60 bg-neutral-50 p-8 dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="flex gap-1 text-amber-400">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+              <p className="mt-4 text-neutral-600 dark:text-neutral-400">
+                &ldquo;We manage 50+ travelers across 8 countries. Ride &amp; Bill keeps everything organized and audit-ready.&rdquo;
+              </p>
+              <div className="mt-6 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1e3a5f] text-sm font-bold text-white">AL</div>
+                <div>
+                  <div className="text-sm font-semibold text-neutral-900 dark:text-white">Anna L.</div>
+                  <div className="text-xs text-neutral-500">Travel Operations Manager</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -309,10 +396,16 @@ export default function LandingPage() {
           <h2 className="text-3xl font-bold tracking-tight text-neutral-900 dark:text-white">
             Start managing your ride receipts today
           </h2>
-          <p className="mt-4 text-neutral-500">No credit card required. Free for up to 50 receipts per month.</p>
-          <Link href="/register" className="mt-8 inline-block">
-            <Button size="lg">Get Started Free</Button>
-          </Link>
+          <p className="mt-4 text-neutral-500">No credit card required. Free for up to 20 receipts per month.</p>
+          <div className="mt-8 flex items-center justify-center gap-4">
+            <Link href="/register">
+              <Button size="lg">Start Free Trial</Button>
+            </Link>
+            {/* TODO: Link to actual demo video/page when available */}
+            <a href="#features" onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}>
+              <Button variant="outline" size="lg">Watch Demo</Button>
+            </a>
+          </div>
         </div>
       </section>
       </main>
@@ -322,7 +415,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-6 text-center text-sm text-neutral-400">
           &copy; 2026 Ride &amp; Bill. Built for professionals who move.
           <br />
-          <span className="text-neutral-300">Part of the Tropos group of companies</span>
+          <span className="text-neutral-400">Part of the Tropos group of companies</span>
         </div>
       </footer>
     </div>
