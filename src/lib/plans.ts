@@ -39,6 +39,10 @@ export interface PlanFeatures {
   accountantAccess: boolean;
   centralizedExports: boolean;
   prioritySupport: boolean;
+  xlsxExport: boolean;
+  zipExport: boolean;
+  statementGenerator: boolean;
+  statementHistory: boolean;
 }
 
 export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
@@ -67,6 +71,10 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
       accountantAccess: false,
       centralizedExports: false,
       prioritySupport: false,
+      xlsxExport: false,
+      zipExport: false,
+      statementGenerator: false,
+      statementHistory: false,
     },
   },
   solo: {
@@ -94,6 +102,10 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
       accountantAccess: false,
       centralizedExports: false,
       prioritySupport: false,
+      xlsxExport: true,
+      zipExport: false,
+      statementGenerator: true,
+      statementHistory: true,
     },
   },
   pro: {
@@ -121,6 +133,10 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
       accountantAccess: false,
       centralizedExports: false,
       prioritySupport: false,
+      xlsxExport: true,
+      zipExport: true,
+      statementGenerator: true,
+      statementHistory: true,
     },
   },
   team: {
@@ -148,6 +164,10 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
       accountantAccess: true,
       centralizedExports: true,
       prioritySupport: true,
+      xlsxExport: true,
+      zipExport: true,
+      statementGenerator: true,
+      statementHistory: true,
     },
   },
   custom: {
@@ -175,6 +195,10 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
       accountantAccess: true,
       centralizedExports: true,
       prioritySupport: true,
+      xlsxExport: true,
+      zipExport: true,
+      statementGenerator: true,
+      statementHistory: true,
     },
   },
 };

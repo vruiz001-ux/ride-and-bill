@@ -68,6 +68,8 @@ model User {
   billingEntities      BillingEntity[]
   invoiceBatches       InvoiceBatch[]
   exportJobs           ExportJob[]
+  statements           Statement[]
+  auditLogs            AuditLog[]
   passwordResetTokens  PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
   workspaceMembers     WorkspaceMember[]
@@ -86,6 +88,8 @@ model Workspace {
   billingEntities   BillingEntity[]
   invoiceBatches    InvoiceBatch[]
   exportJobs        ExportJob[]
+  statements        Statement[]
+  auditLogs         AuditLog[]
   usageCounters     UsageCounter[]
   usageEvents       UsageEvent[]
   syncRuns          SyncRun[]
@@ -247,6 +251,8 @@ model Receipt {
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace            Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   billingEntity        BillingEntity? @relation(fields: [billingEntityId], references: [id])
+  files                ReceiptFile[]
+  statementReceipts    StatementReceipt[]
 
   @@index([userId, tripDate])
   @@index([userId, provider])
@@ -346,4 +352,81 @@ model EmailVerificationToken {
 
   @@index([token])
   @@index([userId])
+}
+
+// ─── Receipt Files ────────────────────────────────────────────────────────────
+
+model ReceiptFile {
+  id        String   @id @default(cuid())
+  receiptId String
+  filename  String
+  mimeType  String
+  sizeBytes Int
+  hash      String
+  data      String   // base64-encoded file content
+  source    String   @default("email_attachment") // email_attachment | manual_upload | generated
+  createdAt DateTime @default(now())
+  receipt   Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@unique([hash, receiptId])
+  @@index([receiptId])
+}
+
+// ─── Statements ───────────────────────────────────────────────────────────────
+
+model Statement {
+  id                  String   @id @default(cuid())
+  userId              String
+  workspaceId         String?
+  title               String
+  periodStart         DateTime
+  periodEnd           DateTime
+  filtersJson         String   @default("{}")
+  totalReceipts       Int      @default(0)
+  totalAmount         Float    @default(0)
+  totalAmountCurrency String   @default("EUR")
+  outputCurrency      String   @default("EUR")
+  applyMarkup         Boolean  @default(false)
+  markupPercent       Float    @default(0)
+  totalWithMarkup     Float?
+  status              String   @default("generated")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace           Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  statementReceipts   StatementReceipt[]
+
+  @@index([workspaceId, createdAt])
+  @@index([userId])
+}
+
+model StatementReceipt {
+  id          String    @id @default(cuid())
+  statementId String
+  receiptId   String
+  statement   Statement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  receipt     Receipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@unique([statementId, receiptId])
+  @@index([statementId])
+  @@index([receiptId])
+}
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String?
+  userId      String
+  action      String
+  entityType  String
+  entityId    String
+  details     String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([entityType, entityId])
 }

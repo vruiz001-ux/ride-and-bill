@@ -25,7 +25,7 @@ export default function ExportsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [entities, setEntities] = useState<BillingEntity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [format, setFormat] = useState<"pdf" | "csv">("pdf");
+  const [format, setFormat] = useState<"pdf" | "csv" | "xlsx" | "zip">("pdf");
   const [outputCurrency, setOutputCurrency] = useState("PLN");
   const [applyMarkup, setApplyMarkup] = useState(true);
   const [billingEntity, setBillingEntity] = useState("all");
@@ -96,27 +96,16 @@ export default function ExportsPage() {
         return;
       }
 
-      if (format === "pdf") {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `ride-and-bill-${new Date().toISOString().split("T")[0]}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } else if (format === "csv") {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `ride-and-bill-${new Date().toISOString().split("T")[0]}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
+      const extMap: Record<string, string> = { pdf: "pdf", csv: "csv", xlsx: "xlsx", zip: "zip" };
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ride-and-bill-${new Date().toISOString().split("T")[0]}.${extMap[format] || format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
       const historyRes = await fetch("/api/exports");
       const historyData = await historyRes.json();
@@ -175,6 +164,26 @@ export default function ExportsPage() {
                   <div className="mt-1 text-sm font-medium">CSV Report</div>
                   <div className="text-xs text-neutral-400">
                     {canCsv ? "Full data with FX breakdown" : "Requires Solo plan or higher"}
+                  </div>
+                </button>
+                <button
+                  onClick={() => features?.xlsxExport && setFormat("xlsx")}
+                  className={`flex-1 rounded-xl border-2 p-4 text-center transition-all ${!features?.xlsxExport ? "opacity-50 cursor-not-allowed" : ""} ${format === "xlsx" ? "border-neutral-900 bg-neutral-50 dark:border-white dark:bg-neutral-800" : "border-neutral-200 dark:border-neutral-700"}`}
+                >
+                  <div className="text-2xl">&#x1F4D1;</div>
+                  <div className="mt-1 text-sm font-medium">XLSX</div>
+                  <div className="text-xs text-neutral-400">
+                    {features?.xlsxExport ? "Excel spreadsheet" : "Solo plan or higher"}
+                  </div>
+                </button>
+                <button
+                  onClick={() => features?.zipExport && setFormat("zip")}
+                  className={`flex-1 rounded-xl border-2 p-4 text-center transition-all ${!features?.zipExport ? "opacity-50 cursor-not-allowed" : ""} ${format === "zip" ? "border-neutral-900 bg-neutral-50 dark:border-white dark:bg-neutral-800" : "border-neutral-200 dark:border-neutral-700"}`}
+                >
+                  <div className="text-2xl">&#x1F4E6;</div>
+                  <div className="mt-1 text-sm font-medium">ZIP Bundle</div>
+                  <div className="text-xs text-neutral-400">
+                    {features?.zipExport ? "PDF + XLSX + receipts" : "Pro plan or higher"}
                   </div>
                 </button>
               </div>

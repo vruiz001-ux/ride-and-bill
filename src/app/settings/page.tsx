@@ -1,13 +1,11 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PlanBadge } from "@/components/plan-badge";
 import { UsageBar } from "@/components/usage-bar";
 import { SUPPORTED_CURRENCIES } from "@/lib/services/fx";
-import { formatDate } from "@/lib/utils";
 import type { ConnectedEmailAccount } from "@/lib/types";
 
 const TIMEZONES = [
@@ -39,7 +37,6 @@ interface UsageInfo {
 export default function SettingsPage() {
   const { data: session } = useSession();
   const [emailAccounts, setEmailAccounts] = useState<ConnectedEmailAccount[]>([]);
-  const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [plan, setPlan] = useState<PlanInfo | null>(null);
@@ -115,26 +112,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const res = await fetch("/api/sync", { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json();
-        showMessage("error", data.error || "Sync failed");
-      } else {
-        const dashData = await fetch("/api/dashboard").then(r => r.json());
-        setEmailAccounts(dashData.emailAccounts || []);
-        if (dashData.usage) setUsage(dashData.usage);
-        showMessage("success", "Sync complete");
-      }
-    } catch {
-      showMessage("error", "Sync failed");
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const handleDeleteAccount = async () => {
     if (!confirm("Are you sure? This will permanently delete your account and all data.")) return;
     if (!confirm("This cannot be undone. Are you absolutely sure?")) return;
@@ -147,8 +124,6 @@ export default function SettingsPage() {
     }
   };
 
-  const canConnectOutlook = plan?.features?.outlookSync ?? false;
-  const canConnectGmail = plan?.features?.gmailSync ?? false;
   const companyDetailsAllowed = plan?.features?.companyDetailsInReports ?? false;
 
   return (
@@ -270,59 +245,17 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Connected Email Accounts</CardTitle>
-          <CardDescription>Email accounts scanned for ride receipts.</CardDescription>
+          <CardTitle>Email Connections</CardTitle>
+          <CardDescription>
+            {emailAccounts.length > 0
+              ? `${emailAccounts.length} email account(s) connected.`
+              : "No email accounts connected yet."}
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {emailAccounts.map(acc => (
-            <div key={acc.id} className="flex items-center justify-between rounded-xl border border-neutral-200/60 p-4 dark:border-neutral-800">
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-lg dark:bg-blue-900/20">
-                  {acc.provider === "gmail" ? "\uD83D\uDCE7" : acc.provider === "outlook" ? "\uD83D\uDCE8" : "\uD83D\uDCEC"}
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-neutral-900 dark:text-white">{acc.email}</div>
-                  <div className="text-xs text-neutral-400">
-                    {acc.provider.charAt(0).toUpperCase() + acc.provider.slice(1)} &middot; {acc.totalImported} imported
-                    {acc.lastSyncAt ? ` \u00B7 Last sync ${formatDate(acc.lastSyncAt)}` : ""}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge variant={acc.status === "active" ? "success" : "warning"}>{acc.status}</Badge>
-                <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
-                  {syncing ? "Syncing..." : "Sync Now"}
-                </Button>
-              </div>
-            </div>
-          ))}
-          {emailAccounts.length === 0 && (
-            <div className="py-6 text-center text-neutral-400 text-sm">
-              {plan?.id === "free"
-                ? "Email sync is not available on the Free plan. Upgrade to connect an inbox."
-                : "No email accounts connected."}
-            </div>
-          )}
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => signIn("google", { callbackUrl: "/settings" })}
-              disabled={!canConnectGmail}
-            >
-              Connect Gmail
-              {!canConnectGmail && <span className="ml-1 text-xs opacity-60">(upgrade)</span>}
-            </Button>
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => signIn("azure-ad", { callbackUrl: "/settings" })}
-              disabled={!canConnectOutlook}
-            >
-              Connect Outlook
-              {!canConnectOutlook && <span className="ml-1 text-xs opacity-60">(Pro+)</span>}
-            </Button>
-          </div>
+        <CardContent>
+          <a href="/connections">
+            <Button variant="outline">Manage Connections &rarr;</Button>
+          </a>
         </CardContent>
       </Card>
 

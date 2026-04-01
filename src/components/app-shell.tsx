@@ -9,7 +9,9 @@ import { Logo } from "@/components/logo";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "\uD83D\uDCCA" },
+  { href: "/connections", label: "Connections", icon: "\uD83D\uDD17" },
   { href: "/receipts", label: "Receipts", icon: "\uD83E\uDDFE" },
+  { href: "/statements", label: "Statements", icon: "\uD83D\uDCCB" },
   { href: "/exports", label: "Exports", icon: "\uD83D\uDCE5" },
   { href: "/billing", label: "Billing", icon: "\uD83C\uDFE2" },
   { href: "/settings", label: "Settings", icon: "\u2699\uFE0F" },

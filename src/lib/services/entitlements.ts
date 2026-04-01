@@ -236,7 +236,7 @@ export function checkCanSync(
 
 export function checkCanExport(
   entitlements: Entitlements,
-  format: 'pdf' | 'csv',
+  format: 'pdf' | 'csv' | 'xlsx' | 'zip',
   exportType: 'summary' | 'full' = 'full'
 ): EntitlementError | null {
   if (entitlements.isReadOnly) {
@@ -255,10 +255,66 @@ export function checkCanExport(
     };
   }
 
+  if (format === 'xlsx' && !entitlements.features.xlsxExport) {
+    return {
+      code: 'XLSX_NOT_AVAILABLE',
+      message: 'XLSX export requires Solo plan or higher.',
+      plan: entitlements.plan.name,
+    };
+  }
+
+  if (format === 'zip' && !entitlements.features.zipExport) {
+    return {
+      code: 'ZIP_NOT_AVAILABLE',
+      message: 'ZIP bundle export requires Pro plan or higher.',
+      plan: entitlements.plan.name,
+    };
+  }
+
   if (format === 'pdf' && exportType === 'full' && !entitlements.features.fullPdfExport) {
     return {
       code: 'FULL_PDF_NOT_AVAILABLE',
       message: 'Full PDF export with receipt details requires a paid plan. You can export a summary PDF on the Free plan.',
+      plan: entitlements.plan.name,
+    };
+  }
+
+  return null;
+}
+
+export function checkCanGenerateStatement(entitlements: Entitlements): EntitlementError | null {
+  if (entitlements.isReadOnly) {
+    return {
+      code: 'SUBSCRIPTION_INACTIVE',
+      message: 'Your subscription is inactive. Please update your billing.',
+      plan: entitlements.plan.name,
+    };
+  }
+
+  if (!entitlements.features.statementGenerator) {
+    return {
+      code: 'STATEMENTS_NOT_AVAILABLE',
+      message: 'Statement generation requires Solo plan or higher.',
+      plan: entitlements.plan.name,
+    };
+  }
+
+  return null;
+}
+
+export function checkCanUpload(entitlements: Entitlements): EntitlementError | null {
+  if (entitlements.isReadOnly) {
+    return {
+      code: 'SUBSCRIPTION_INACTIVE',
+      message: 'Your subscription is inactive.',
+      plan: entitlements.plan.name,
+    };
+  }
+
+  if (!entitlements.features.manualUpload) {
+    return {
+      code: 'UPLOAD_NOT_AVAILABLE',
+      message: 'Manual upload is not available on your current plan.',
       plan: entitlements.plan.name,
     };
   }

@@ -3,7 +3,7 @@
 export type Provider = 'uber' | 'bolt' | 'waymo' | 'careem' | 'freenow';
 export type ReceiptStatus = 'parsed' | 'review' | 'failed' | 'duplicate';
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'completed';
-export type ExportFormat = 'pdf' | 'excel' | 'zip';
+export type ExportFormat = 'pdf' | 'csv' | 'xlsx' | 'zip';
 export type ConversionStatus = 'converted' | 'pending' | 'fallback' | 'failed';
 
 export interface User {
@@ -192,4 +192,57 @@ export interface EmailAttachment {
   mimeType: string;
   data: string; // base64
   size: number;
+}
+
+// ─── Receipt Files ────────────────────────────────────────────────────────────
+
+export interface ReceiptFile {
+  id: string;
+  receiptId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  hash: string;
+  source: 'email_attachment' | 'manual_upload' | 'generated';
+  createdAt: string;
+}
+
+// ─── Statements ───────────────────────────────────────────────────────────────
+
+export interface Statement {
+  id: string;
+  userId: string;
+  workspaceId: string | null;
+  title: string;
+  periodStart: string;
+  periodEnd: string;
+  filtersJson: string;
+  totalReceipts: number;
+  totalAmount: number;
+  totalAmountCurrency: string;
+  outputCurrency: string;
+  applyMarkup: boolean;
+  markupPercent: number;
+  totalWithMarkup: number | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StatementWithReceipts extends Statement {
+  receipts: Receipt[];
+}
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+
+export interface AuditLog {
+  id: string;
+  workspaceId: string | null;
+  userId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  details: string | null;
+  ipAddress: string | null;
+  createdAt: string;
 }

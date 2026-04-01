@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generatePdfExport } from '@/lib/services/pdf';
+import { generateXlsxExport } from '@/lib/services/xlsx';
+import { generateZipBundle } from '@/lib/services/zip';
 import { getUserEntitlements, checkCanExport, resolveUserWorkspace } from '@/lib/services/entitlements';
 
 export async function GET() {
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
 
   const exportError = checkCanExport(
     entitlements,
-    exportFormat as 'pdf' | 'csv',
+    exportFormat as 'pdf' | 'csv' | 'xlsx' | 'zip',
     exportType
   );
   if (exportError) {
@@ -121,6 +123,65 @@ export async function POST(request: Request) {
         headers: {
           'Content-Type': 'text/csv',
           'Content-Disposition': `attachment; filename="ride-and-bill-${dateStr}.csv"`,
+        },
+      });
+    }
+
+    if (exportFormat === 'xlsx') {
+      const xlsxReceipts = await fetchExportReceipts({ workspaceId, filters, retentionCutoff: entitlements.retentionCutoff });
+      const xlsxBuffer = generateXlsxExport({
+        receipts: xlsxReceipts.map(r => ({ ...r, tripDate: r.tripDate.toISOString(), tags: r.tags || '' })),
+        outputCurrency: outputCurrency || 'EUR',
+        applyMarkup: applyMarkup ?? true,
+        markupPercent: markupPercent ?? 5,
+      });
+
+      await prisma.exportJob.update({
+        where: { id: exportJob.id },
+        data: { status: 'completed', completedAt: new Date(), receiptCount: xlsxReceipts.length },
+      });
+
+      const dateStr = new Date().toISOString().split('T')[0];
+      return new Response(new Uint8Array(xlsxBuffer), {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="ride-and-bill-${dateStr}.xlsx"`,
+        },
+      });
+    }
+
+    if (exportFormat === 'zip') {
+      const zipReceipts = await fetchExportReceipts({ workspaceId, filters, retentionCutoff: entitlements.retentionCutoff });
+      const receiptIds = zipReceipts.map(r => r.id);
+      const receiptFiles = await prisma.receiptFile.findMany({
+        where: { receiptId: { in: receiptIds } },
+        select: { filename: true, mimeType: true, data: true },
+      });
+
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { name: true, companyName: true, companyAddress: true, vatId: true },
+      });
+
+      const zipBuffer = await generateZipBundle({
+        receipts: zipReceipts.map(r => ({ ...r, tripDate: r.tripDate.toISOString(), tags: r.tags || '' })),
+        receiptFiles,
+        outputCurrency: outputCurrency || 'EUR',
+        applyMarkup: applyMarkup ?? true,
+        markupPercent: markupPercent ?? 5,
+        user: user ?? undefined,
+      });
+
+      await prisma.exportJob.update({
+        where: { id: exportJob.id },
+        data: { status: 'completed', completedAt: new Date(), receiptCount: zipReceipts.length },
+      });
+
+      const dateStr = new Date().toISOString().split('T')[0];
+      return new Response(new Uint8Array(zipBuffer), {
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="ride-and-bill-${dateStr}.zip"`,
         },
       });
     }
@@ -206,4 +267,35 @@ async function generateCsvExport(options: {
     headers.map(escape).join(','),
     ...rows.map(row => row.map(escape).join(',')),
   ].join('\n');
+}
+
+// ─── Shared receipt query for XLSX/ZIP exports ──────────────────────────────
+
+async function fetchExportReceipts(options: {
+  workspaceId: string;
+  filters?: Record<string, string>;
+  retentionCutoff: Date;
+}) {
+  const { workspaceId, filters, retentionCutoff } = options;
+
+  const where: Record<string, unknown> = {
+    workspaceId,
+    tripDate: { gte: retentionCutoff },
+    status: { not: 'failed' },
+  };
+  if (filters?.provider) where.provider = filters.provider;
+  if (filters?.currency) where.currency = filters.currency;
+
+  if (filters?.month && filters?.year) {
+    const ym = `${filters.year}-${String(parseInt(filters.month)).padStart(2, '0')}`;
+    const startDate = new Date(`${ym}-01`);
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + 1);
+    where.tripDate = { gte: startDate > retentionCutoff ? startDate : retentionCutoff, lt: endDate };
+  }
+
+  return prisma.receipt.findMany({
+    where,
+    orderBy: { tripDate: 'desc' },
+  });
 }

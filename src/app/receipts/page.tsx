@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { formatCurrency, formatDate, providerLabel, confidenceColor } from "@/lib/utils";
 import type { Receipt, BillingEntity } from "@/lib/types";
 
@@ -24,11 +25,14 @@ export default function ReceiptsPage() {
   const [entities, setEntities] = useState<BillingEntity[]>([]);
   const [loading, setLoading] = useState(true);
   const [providerFilter, setProviderFilter] = useState<string>("all");
-  const [countryFilter, setCountryFilter] = useState<string>("all");
-  const [currencyFilter, setCurrencyFilter] = useState<string>("all");
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+  const [selectedCurrencies, setSelectedCurrencies] = useState<string[]>([]);
   const [filterMonth, setFilterMonth] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [filterMode, setFilterMode] = useState<"month" | "range">("month");
   const [selected, setSelected] = useState<Receipt | null>(null);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Record<string, string | number | null>>({});
@@ -58,21 +62,29 @@ export default function ReceiptsPage() {
   const filtered = useMemo(() => {
     return receipts.filter(r => {
       if (providerFilter !== "all" && r.provider !== providerFilter) return false;
-      if (countryFilter !== "all" && r.country !== countryFilter) return false;
-      if (currencyFilter !== "all" && r.currency !== currencyFilter) return false;
-      if (filterYear !== "all" && !r.tripDate.startsWith(filterYear)) return false;
-      if (filterMonth !== "all" && filterYear !== "all") {
-        const ym = `${filterYear}-${filterMonth.padStart(2, '0')}`;
-        if (!r.tripDate.startsWith(ym)) return false;
-      } else if (filterMonth !== "all") {
-        const m = parseInt(filterMonth);
-        const rMonth = new Date(r.tripDate).getMonth() + 1;
-        if (rMonth !== m) return false;
-      }
+      if (selectedCountries.length > 0 && !selectedCountries.includes(r.country)) return false;
+      if (selectedCurrencies.length > 0 && !selectedCurrencies.includes(r.currency)) return false;
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
+
+      // Date filtering
+      if (filterMode === "range") {
+        if (dateFrom && r.tripDate < dateFrom) return false;
+        if (dateTo && r.tripDate > dateTo + "T23:59:59") return false;
+      } else {
+        if (filterYear !== "all" && !r.tripDate.startsWith(filterYear)) return false;
+        if (filterMonth !== "all" && filterYear !== "all") {
+          const ym = `${filterYear}-${filterMonth.padStart(2, '0')}`;
+          if (!r.tripDate.startsWith(ym)) return false;
+        } else if (filterMonth !== "all") {
+          const m = parseInt(filterMonth);
+          const rMonth = new Date(r.tripDate).getMonth() + 1;
+          if (rMonth !== m) return false;
+        }
+      }
+
       return true;
     }).sort((a, b) => new Date(b.tripDate).getTime() - new Date(a.tripDate).getTime());
-  }, [receipts, providerFilter, countryFilter, currencyFilter, filterMonth, filterYear, statusFilter]);
+  }, [receipts, providerFilter, selectedCountries, selectedCurrencies, filterMonth, filterYear, statusFilter, filterMode, dateFrom, dateTo]);
 
   // Monthly summary — computed from filtered receipts
   const summary = useMemo(() => {
@@ -191,42 +203,69 @@ export default function ReceiptsPage() {
         <Button size="sm"><span className="mr-2">📥</span> Export Selected</Button>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
-          <option value="all">All Months</option>
-          {availableMonths.map(m => <option key={m} value={String(m)}>{MONTH_NAMES[m]}</option>)}
-        </select>
-        <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
-          <option value="all">All Years</option>
-          {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select value={providerFilter} onChange={e => setProviderFilter(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
-          <option value="all">All Providers</option>
-          <option value="uber">Uber</option>
-          <option value="bolt">Bolt</option>
-          <option value="waymo">Waymo</option>
-          <option value="careem">Careem</option>
-          <option value="freenow">FREE NOW</option>
-        </select>
-        <select value={countryFilter} onChange={e => setCountryFilter(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
-          <option value="all">All Countries</option>
-          {countries.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={currencyFilter} onChange={e => setCurrencyFilter(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
-          <option value="all">All Currencies</option>
-          {currencies.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
-          <option value="all">All Statuses</option>
-          <option value="parsed">Parsed</option>
-          <option value="review">Needs Review</option>
-          <option value="failed">Failed</option>
-        </select>
-        {(providerFilter !== "all" || countryFilter !== "all" || currencyFilter !== "all" || filterMonth !== "all" || filterYear !== "all" || statusFilter !== "all") && (
-          <Button variant="ghost" size="sm" onClick={() => { setProviderFilter("all"); setCountryFilter("all"); setCurrencyFilter("all"); setFilterMonth("all"); setFilterYear("all"); setStatusFilter("all"); }}>
-            Clear filters
-          </Button>
-        )}
+      <div className="space-y-3">
+        {/* Date filter mode toggle */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setFilterMode("month")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${filterMode === "month" ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"}`}
+          >
+            Month
+          </button>
+          <button
+            onClick={() => setFilterMode("range")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${filterMode === "range" ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"}`}
+          >
+            Date Range
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          {filterMode === "month" ? (
+            <>
+              <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+                <option value="all">All Months</option>
+                {availableMonths.map(m => <option key={m} value={String(m)}>{MONTH_NAMES[m]}</option>)}
+              </select>
+              <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+                <option value="all">All Years</option>
+                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-neutral-500">From</label>
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-neutral-500">To</label>
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+              </div>
+            </>
+          )}
+          <select value={providerFilter} onChange={e => setProviderFilter(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+            <option value="all">All Providers</option>
+            <option value="uber">Uber</option>
+            <option value="bolt">Bolt</option>
+            <option value="waymo">Waymo</option>
+            <option value="careem">Careem</option>
+            <option value="freenow">FREE NOW</option>
+          </select>
+          <MultiSelect label="Countries" options={countries} selected={selectedCountries} onChange={setSelectedCountries} />
+          <MultiSelect label="Currencies" options={currencies} selected={selectedCurrencies} onChange={setSelectedCurrencies} />
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm dark:border-neutral-700 dark:bg-neutral-800">
+            <option value="all">All Statuses</option>
+            <option value="parsed">Parsed</option>
+            <option value="review">Needs Review</option>
+            <option value="failed">Failed</option>
+          </select>
+          {(providerFilter !== "all" || selectedCountries.length > 0 || selectedCurrencies.length > 0 || filterMonth !== "all" || filterYear !== "all" || statusFilter !== "all" || dateFrom || dateTo) && (
+            <Button variant="ghost" size="sm" onClick={() => { setProviderFilter("all"); setSelectedCountries([]); setSelectedCurrencies([]); setFilterMonth("all"); setFilterYear("all"); setStatusFilter("all"); setDateFrom(""); setDateTo(""); }}>
+              Clear filters
+            </Button>
+          )}
+        </div>
       </div>
 
       {summary && (
